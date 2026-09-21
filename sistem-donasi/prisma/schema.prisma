@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PENGURUS
+  DONATUR
+  PENERIMA_BANTUAN
+}
+
+enum StatusDonasi {
+  PENDING
+  BERHASIL
+  GAGAL
+}
+
+enum StatusPenerima {
+  VERIFIKASI
+  DISETUJUI
+  DITOLAK
+}
+
+model User {
+  id              Int              @id @default(autoincrement())
+  nama            String
+  email           String           @unique
+  password        String
+  role            Role
+  createdAt       DateTime         @default(now())
+  
+  // Relasi
+  donasi          Donasi[]
+  penerimaBantuan PenerimaBantuan?
+}
+
+model ProgramDonasi {
+  id                Int                 @id @default(autoincrement())
+  judul             String
+  deskripsi         String              @db.Text
+  targetDana        Float
+  terkumpul         Float               @default(0)
+  createdAt         DateTime            @default(now())
+  
+  // Relasi
+  donasi            Donasi[]
+  penyaluranBantuan PenyaluranBantuan[]
+}
+
+model Donasi {
+  id               Int           @id @default(autoincrement())
+  jumlah           Float
+  metodePembayaran String        @default("TRANSFER_BANK")
+  buktiPembayaran  String?
+  status           StatusDonasi  @default(PENDING)
+  createdAt        DateTime      @default(now())
+  
+  // 🟢 PERBAIKAN: Diberi '?' agar boleh bernilai null (opsional untuk donasi tanpa login)
+  donaturId        Int?
+  donatur          User?         @relation(fields: [donaturId], references: [id])
+  
+  programId        Int
+  program          ProgramDonasi @relation(fields: [programId], references: [id])
+}
+
+model PenerimaBantuan {
+  id                Int                 @id @default(autoincrement())
+  userId            Int                 @unique
+  user              User                @relation(fields: [userId], references: [id])
+  alamat            String
+  noHp              String
+  alasan            String              @db.Text
+  status            StatusPenerima      @default(VERIFIKASI)
+  
+  // Relasi
+  penyaluranBantuan PenyaluranBantuan[]
+}
+
+model PenyaluranBantuan {
+  id            Int             @id @default(autoincrement())
+  jumlahBantuan Float
+  tanggalSalur  DateTime        @default(now())
+  keterangan    String
+  
+  // Relasi
+  programId     Int
+  program       ProgramDonasi   @relation(fields: [programId], references: [id])
+  penerimaId    Int
+  penerima      PenerimaBantuan @relation(fields: [penerimaId], references: [id])
+}
