@@ -23,7 +23,7 @@ router.post(
 );
 
 // --- ROUTES DONASI & PENYALURAN ---
-// 🟢 PERBAIKAN: Middleware authenticateToken DIBUANG agar publik/anonim bisa donasi
+// Middleware authenticateToken dibuang agar publik/anonim bisa donasi
 router.post("/donasi", donasiController.createDonasi);
 
 router.get(
@@ -39,7 +39,7 @@ router.post(
   donasiController.createPenyaluran,
 );
 
-// --- ROUTES MANAJEMEN PENGURUS (KHUSUS ADMIN) ---
+// --- ROUTES MANAJEMEN USER & PENGURUS (KHUSUS ADMIN) ---
 router.get(
   "/admin/pengurus",
   authenticateToken,
@@ -57,6 +57,57 @@ router.put(
   authenticateToken,
   isAdmin,
   adminController.resetPasswordPengurus,
+);
+router.get(
+  "/admin/summary-keuangan",
+  authenticateToken,
+  isAdmin,
+  adminController.getSummaryKeuangan,
+);
+
+router.get(
+  "/admin/pengurus",
+  authenticateToken,
+  isAdmin,
+  adminController.getDaftarPengurus,
+);
+
+// 🟢 RUTE TAMBAHAN: MANAJEMEN PENERIMA BANTUAN & DONATUR
+router.get(
+  "/admin/penerima",
+  authenticateToken,
+  isAdmin,
+  adminController.getDaftarPenerima,
+);
+router.get(
+  "/admin/donatur",
+  authenticateToken,
+  isAdmin,
+  adminController.getDaftarDonatur,
+);
+router.get(
+  "/admin/penerima-pending",
+  authenticateToken,
+  isAdmin,
+  adminController.getPenerimaBantuanPending,
+);
+router.put(
+  "/admin/verifikasi-penerima/:id",
+  authenticateToken,
+  isAdmin,
+  adminController.verifikasiPenerimaBantuan,
+);
+router.put(
+  "/admin/user/:id",
+  authenticateToken,
+  isAdmin,
+  adminController.updateUser,
+);
+router.delete(
+  "/admin/user/:id",
+  authenticateToken,
+  isAdmin,
+  adminController.hapusUser,
 );
 
 // --- ROUTES EXPORT LAPORAN ---
