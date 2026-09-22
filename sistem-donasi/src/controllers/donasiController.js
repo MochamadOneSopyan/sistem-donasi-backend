@@ -17,7 +17,6 @@ exports.createDonasi = async (req, res) => {
         .json({ message: "Program dan nominal donasi valid wajib diisi." });
     }
 
-    // 🟢 Susun payload data donasi
     const payloadDonasi = {
       programId: parseInt(programId),
       jumlah: parseFloat(jumlah),
@@ -25,7 +24,6 @@ exports.createDonasi = async (req, res) => {
       status: "BERHASIL",
     };
 
-    // 🟢 Hanya masukkan field donaturId jika pengguna memang sedang login
     if (req.user && req.user.id) {
       payloadDonasi.donaturId = req.user.id;
     }
@@ -35,7 +33,7 @@ exports.createDonasi = async (req, res) => {
       data: payloadDonasi,
     });
 
-    // 2. Update Saldo Terkumpul pada Program (Solusi Toleran untuk Nama Model Prisma)
+    // 2. Update Saldo Terkumpul pada Program
     try {
       if (prisma.program) {
         await prisma.program.update({
@@ -113,14 +111,35 @@ exports.getLaporanTransparansi = async (req, res) => {
 // 4. Pengurus Menyalurkan Bantuan ke Penerima
 exports.createPenyaluran = async (req, res) => {
   try {
-    const { programId, penerimaId, jumlahBantuan, keterangan } = req.body;
+    const { programId, penerimaId, jumlah, jumlahBantuan, keterangan } =
+      req.body;
+
+    const nominalBantuan = parseFloat(jumlahBantuan || jumlah);
+
+    if (!programId || !penerimaId || !nominalBantuan) {
+      return res.status(400).json({
+        message: "Program, Penerima Bantuan, dan Nominal Wajib diisi!",
+      });
+    }
+
+    // Pengecekan ID Penerima (Apakah ID Tabel PenerimaBantuan atau ID User)
+    let validPenerimaId = parseInt(penerimaId);
+    const profilPenerima = await prisma.penerimaBantuan.findFirst({
+      where: {
+        OR: [{ id: validPenerimaId }, { userId: validPenerimaId }],
+      },
+    });
+
+    if (profilPenerima) {
+      validPenerimaId = profilPenerima.id;
+    }
 
     const penyaluran = await prisma.penyaluranBantuan.create({
       data: {
         programId: parseInt(programId),
-        penerimaId: parseInt(penerimaId),
-        jumlahBantuan: parseFloat(jumlahBantuan),
-        keterangan,
+        penerimaId: validPenerimaId,
+        jumlahBantuan: nominalBantuan,
+        keterangan: keterangan || "Penyaluran Bantuan",
       },
     });
 
@@ -129,6 +148,7 @@ exports.createPenyaluran = async (req, res) => {
       data: penyaluran,
     });
   } catch (error) {
+    console.error("Error createPenyaluran:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -137,7 +157,11 @@ exports.createPenyaluran = async (req, res) => {
 exports.exportPDF = async (req, res) => {
   try {
     const penyaluranList = await prisma.penyaluranBantuan.findMany({
-      include: { program: true, penerima: { include: { user: true } } },
+      include: {
+        program: true,
+        penerima: { include: { user: true } },
+      },
+      orderBy: { id: "desc" },
     });
 
     const doc = new PDFDocument({ margin: 30 });
@@ -151,27 +175,37 @@ exports.exportPDF = async (req, res) => {
 
     // Header Laporan
     doc
-      .fontSize(18)
+      .fontSize(16)
       .text("LAPORAN PENYALURAN BANTUAN YAYASAN MULIA KARYA BERSAMA", {
         align: "center",
       });
     doc.moveDown();
     doc
-      .fontSize(12)
+      .fontSize(10)
       .text(`Tanggal Cetak: ${new Date().toLocaleDateString("id-ID")}`);
     doc.moveDown();
 
     // Isi Data
-    penyaluranList.forEach((item, index) => {
-      doc
-        .fontSize(10)
-        .text(
-          `${index + 1}. Program: ${item.program.judul} | Penerima: ${item.penerima.user.nama} | Bantuan: Rp ${item.jumlahBantuan.toLocaleString("id-ID")}`,
-        );
-    });
+    if (penyaluranList.length === 0) {
+      doc.fontSize(10).text("Belum ada data penyaluran bantuan.");
+    } else {
+      penyaluranList.forEach((item, index) => {
+        const namaProgram =
+          item.program?.judul || item.program?.namaProgram || "Program Donasi";
+        const namaPenerima = item.penerima?.user?.nama || "Penerima Bantuan";
+        const nominal = (item.jumlahBantuan || 0).toLocaleString("id-ID");
+
+        doc
+          .fontSize(10)
+          .text(
+            `${index + 1}. Program: ${namaProgram} | Penerima: ${namaPenerima} | Bantuan: Rp ${nominal}`,
+          );
+      });
+    }
 
     doc.end();
   } catch (error) {
+    console.error("Error exportPDF:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -180,7 +214,11 @@ exports.exportPDF = async (req, res) => {
 exports.exportExcel = async (req, res) => {
   try {
     const penyaluranList = await prisma.penyaluranBantuan.findMany({
-      include: { program: true, penerima: { include: { user: true } } },
+      include: {
+        program: true,
+        penerima: { include: { user: true } },
+      },
+      orderBy: { id: "desc" },
     });
 
     const workbook = new ExcelJS.Workbook();
@@ -196,13 +234,16 @@ exports.exportExcel = async (req, res) => {
     ];
 
     penyaluranList.forEach((item, index) => {
+      const tgl = item.tanggalSalur || item.createdAt || new Date();
+      const formattedDate = new Date(tgl).toISOString().split("T")[0];
+
       worksheet.addRow({
         no: index + 1,
-        program: item.program.judul,
-        penerima: item.penerima.user.nama,
-        jumlah: item.jumlahBantuan,
-        keterangan: item.keterangan,
-        tanggal: item.tanggalSalur.toISOString().split("T")[0],
+        program: item.program?.judul || item.program?.namaProgram || "-",
+        penerima: item.penerima?.user?.nama || "-",
+        jumlah: item.jumlahBantuan || 0,
+        keterangan: item.keterangan || "-",
+        tanggal: formattedDate,
       });
     });
 
@@ -218,6 +259,7 @@ exports.exportExcel = async (req, res) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
+    console.error("Error exportExcel:", error);
     res.status(500).json({ error: error.message });
   }
 };
