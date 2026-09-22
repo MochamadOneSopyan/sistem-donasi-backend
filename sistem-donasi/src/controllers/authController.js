@@ -2,7 +2,7 @@ const prisma = require("../db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// 1. REGISTRASI (Bisa untuk Donatur atau Penerima Bantuan)
+// 1. REGISTRASI
 exports.register = async (req, res) => {
   try {
     const { nama, email, password, role, alamat, noHp, alasan } = req.body;
@@ -16,30 +16,39 @@ exports.register = async (req, res) => {
     // Hash password menggunakan bcrypt
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Simpan User Baru
-    const newUser = await prisma.user.create({
-      data: {
-        nama,
-        email,
-        password: hashedPassword,
-        role: role || "DONATUR",
-      },
-    });
+    // Tentukan Role (Default: DONATUR)
+    const userRole = role || "DONATUR";
 
-    // Jika pendaftar adalah PENERIMA_BANTUAN, buatkan data profil penerima bantuan
-    if (role === "PENERIMA_BANTUAN") {
-      await prisma.penerimaBantuan.create({
-        data: {
-          userId: newUser.id,
+    // Opsi data pendaftaran dasar
+    let createData = {
+      nama,
+      email,
+      password: hashedPassword,
+      role: userRole,
+    };
+
+    // Jika PENERIMA_BANTUAN, buat sekaligus menggunakan Nested Write Prisma
+    if (userRole === "PENERIMA_BANTUAN") {
+      createData.penerimaBantuan = {
+        create: {
           alamat: alamat || "-",
           noHp: noHp || "-",
           alasan: alasan || "-",
+          status: "VERIFIKASI", // Sesuai enum StatusPenerima di schema.prisma
         },
-      });
+      };
     }
 
+    // Simpan data User
+    const newUser = await prisma.user.create({
+      data: createData,
+    });
+
     res.status(201).json({
-      message: "Registrasi berhasil!",
+      message:
+        userRole === "PENERIMA_BANTUAN"
+          ? "Registrasi berhasil! Akun Anda sedang dalam proses verifikasi oleh Admin."
+          : "Registrasi berhasil!",
       data: {
         id: newUser.id,
         nama: newUser.nama,
@@ -48,16 +57,26 @@ exports.register = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error Register:", error);
+    res.status(500).json({
+      message: "Gagal melakukan pendaftaran.",
+      error: error.message,
+    });
   }
 };
 
-// 2. LOGIN (Untuk semua aktor: PENGURUS, DONATUR, PENERIMA_BANTUAN)
+// 2. LOGIN (Urutan Pengecekan Ditolak Diperbaiki)
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        penerimaBantuan: true,
+      },
+    });
+
     if (!user) {
       return res.status(404).json({ message: "Email tidak ditemukan!" });
     }
@@ -67,6 +86,32 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "Password salah!" });
     }
 
+    // 🔴 PROTEKSI & PERBAIKAN: Cek Verifikasi khusus PENERIMA_BANTUAN
+    if (user.role === "PENERIMA_BANTUAN") {
+      const profilPenerima = Array.isArray(user.penerimaBantuan)
+        ? user.penerimaBantuan[0]
+        : user.penerimaBantuan;
+
+      // 🟢 1. Cek terlebih dahulu apakah pendaftaran DITOLAK
+      if (profilPenerima && profilPenerima.status === "DITOLAK") {
+        return res.status(403).json({
+          message:
+            "Mohon maaf, pendaftaran akun Penerima Bantuan Anda tidak disetujui oleh Admin.",
+        });
+      }
+
+      // 🟢 2. Cek jika profil belum ada atau statusnya masih VERIFIKASI (Menunggu)
+      if (!profilPenerima || profilPenerima.status === "VERIFIKASI") {
+        return res.status(403).json({
+          message:
+            "Akun Penerima Bantuan Anda belum disetujui/diverifikasi oleh Admin. Silakan tunggu konfirmasi Admin.",
+        });
+      }
+
+      // Jika status "DISETUJUI", proses login akan berlanjut ke bawah.
+    }
+
+    // Pembuatan Token JWT
     const secretKey =
       process.env.JWT_SECRET || "kunci_rahasia_skripsi_yayasan_2026";
 
@@ -87,11 +132,14 @@ exports.login = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error Login:", error);
+    res
+      .status(500)
+      .json({ message: "Terjadi kesalahan saat login.", error: error.message });
   }
 };
 
-// 3. LUPA PASSWORD (MODE UJI COBA/DEMO: TANPA SMTP NODEMAILER)
+// 3. LUPA PASSWORD
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -110,7 +158,6 @@ exports.forgotPassword = async (req, res) => {
     const secretKey =
       process.env.JWT_SECRET || "kunci_rahasia_skripsi_yayasan_2026";
 
-    // Buat token sementara yang berlaku 15 menit
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secretKey, {
       expiresIn: "15m",
     });
@@ -118,13 +165,11 @@ exports.forgotPassword = async (req, res) => {
     const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
     const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
 
-    // Cetak log di terminal backend
     console.log("==========================================");
     console.log(`[PEMULIHAN PASSWORD] User: ${user.nama} (${user.email})`);
     console.log(`[LINK RESET]: ${resetUrl}`);
     console.log("==========================================");
 
-    // Mengembalikan URL langsung ke frontend
     res.json({
       message: "Tautan pemulihan password berhasil dibuat!",
       resetUrl,
@@ -138,7 +183,7 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-// 4. EKSEKUSI RESET PASSWORD BARU DENGAN TOKEN
+// 4. EKSEKUSI RESET PASSWORD BARU
 exports.resetPasswordWithToken = async (req, res) => {
   try {
     const { token, passwordBaru } = req.body;
@@ -158,7 +203,6 @@ exports.resetPasswordWithToken = async (req, res) => {
     const secretKey =
       process.env.JWT_SECRET || "kunci_rahasia_skripsi_yayasan_2026";
 
-    // Verifikasi Token
     let decoded;
     try {
       decoded = jwt.verify(token, secretKey);
@@ -168,7 +212,6 @@ exports.resetPasswordWithToken = async (req, res) => {
       });
     }
 
-    // Hash password baru & simpan ke database
     const hashedPassword = await bcrypt.hash(passwordBaru, 10);
     await prisma.user.update({
       where: { id: decoded.id },
@@ -179,6 +222,7 @@ exports.resetPasswordWithToken = async (req, res) => {
       message: "Password Anda berhasil diperbarui! Silakan login kembali.",
     });
   } catch (error) {
+    console.error("Error Reset Password:", error);
     res.status(500).json({
       message: "Gagal memperbarui password.",
       error: error.message,
