@@ -124,8 +124,6 @@ router.get(
   donasiController.exportExcel,
 );
 
-module.exports = router;
-
 // Check Connection with Database --
 app.get("/health/db", async (req, res) => {
   try {
@@ -135,3 +133,7 @@ app.get("/health/db", async (req, res) => {
     res.status(500).json({ status: "error", message: err.message });
   }
 });
+
+module.exports = router;
+
+
