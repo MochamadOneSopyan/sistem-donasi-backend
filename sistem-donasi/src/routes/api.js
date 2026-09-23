@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const prisma = require("../db.js"); // sesuaikan path ke db.js kamu
 
 const authController = require("../controllers/authController");
 const programController = require("../controllers/programController");
@@ -125,7 +126,7 @@ router.get(
 );
 
 // Check Connection with Database --
-app.get("/health/db", async (req, res) => {
+router.get("/health/db", async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     res.status(200).json({ status: "ok", database: "connected" });
