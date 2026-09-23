@@ -10,7 +10,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://yayasanmuliakaryabersama.netlify.app/", // Ganti dengan URL Netlify kamu nanti
+      "https://yayasanmuliakaryabersama.netlify.app", // Ganti dengan URL Netlify kamu nanti
       "http://localhost:5173",             // Untuk uji coba lokal
     ],
     credentials: true,
