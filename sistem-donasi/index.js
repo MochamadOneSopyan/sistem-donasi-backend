@@ -11,7 +11,7 @@ app.use(
   cors({
     origin: [
       "https://yayasanmuliakaryabersama.netlify.app", // Ganti dengan URL Netlify kamu nanti
-      "sistem-donasi-frontend-production.up.railway.app",
+      "https://sistem-donasi-frontend-production.up.railway.app",
       "http://localhost:5173",             // Untuk uji coba lokal
     ],
     credentials: true,
