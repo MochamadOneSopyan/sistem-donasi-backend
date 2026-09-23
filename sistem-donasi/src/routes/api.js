@@ -125,3 +125,13 @@ router.get(
 );
 
 module.exports = router;
+
+// Check Connection with Database --
+app.get("/health/db", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: "ok", database: "connected" });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+});
