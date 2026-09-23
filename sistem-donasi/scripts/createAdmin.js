@@ -1,4 +1,4 @@
-const prisma = require("../db.js"); // sesuaikan path ke db.js kamu
+const prisma = require("../src/db");// sesuaikan path ke db.js kamu
 const bcrypt = require("bcryptjs");
 
 async function createAdmin() {
