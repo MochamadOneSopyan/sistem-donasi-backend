@@ -1,6 +1,7 @@
 const prisma = require("../db");
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
+const jwt = require("jsonwebtoken");
 
 // ==========================================
 // MODUL DONATUR
@@ -9,7 +10,7 @@ const ExcelJS = require("exceljs");
 // 1. Donatur Mengirim Donasi Online (Publik & Terdaftar)
 exports.createDonasi = async (req, res) => {
   try {
-    const { programId, jumlah, metodePembayaran } = req.body;
+    const { programId, jumlah, metodePembayaran, donaturId } = req.body;
 
     if (!programId || !jumlah || jumlah <= 0) {
       return res
@@ -24,13 +25,45 @@ exports.createDonasi = async (req, res) => {
       status: "BERHASIL",
     };
 
-    if (req.user && req.user.id) {
+    // 1. Ambil donaturId dari token Authorization jika ada
+    if (req.headers && req.headers.authorization) {
+      try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader.startsWith("Bearer ")
+          ? authHeader.split(" ")[1]
+          : authHeader;
+        if (token && process.env.JWT_SECRET) {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          if (decoded && decoded.id) {
+            payloadDonasi.donaturId = decoded.id;
+          }
+        }
+      } catch (errJwt) {
+        // Token tidak valid/kedaluwarsa, lanjut sebagai donasi publik/anonim
+      }
+    }
+
+    // 2. Jika belum ada dari token, gunakan dari req.user jika diset middleware
+    if (!payloadDonasi.donaturId && req.user && req.user.id) {
       payloadDonasi.donaturId = req.user.id;
+    }
+
+    // 3. Jika dikirim dari body
+    if (!payloadDonasi.donaturId && donaturId) {
+      payloadDonasi.donaturId = parseInt(donaturId);
     }
 
     // 1. Simpan Transaksi Donasi
     const donasi = await prisma.donasi.create({
       data: payloadDonasi,
+      include: {
+        donatur: {
+          select: { id: true, nama: true, email: true },
+        },
+        program: {
+          select: { id: true, judul: true },
+        },
+      },
     });
 
     // 2. Update Saldo Terkumpul pada Program
@@ -261,5 +294,40 @@ exports.exportExcel = async (req, res) => {
   } catch (error) {
     console.error("Error exportExcel:", error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+// 7. Ambil Semua Transaksi Donasi Masuk (Khusus Pengurus / Admin)
+exports.getAllDonasi = async (req, res) => {
+  try {
+    const listDonasi = await prisma.donasi.findMany({
+      include: {
+        donatur: {
+          select: {
+            id: true,
+            nama: true,
+            email: true,
+            role: true,
+          },
+        },
+        program: {
+          select: {
+            id: true,
+            judul: true,
+            targetDana: true,
+            terkumpul: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: listDonasi,
+    });
+  } catch (error) {
+    console.error("Error getAllDonasi:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };

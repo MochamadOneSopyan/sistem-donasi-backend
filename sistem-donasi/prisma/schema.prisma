@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -33,10 +32,11 @@ model User {
   password        String
   role            Role
   createdAt       DateTime         @default(now())
-  
-  // Relasi
+
   donasi          Donasi[]
   penerimaBantuan PenerimaBantuan?
+
+  @@map("user")
 }
 
 model ProgramDonasi {
@@ -46,10 +46,11 @@ model ProgramDonasi {
   targetDana        Float
   terkumpul         Float               @default(0)
   createdAt         DateTime            @default(now())
-  
-  // Relasi
+
   donasi            Donasi[]
   penyaluranBantuan PenyaluranBantuan[]
+
+  @@map("programdonasi")
 }
 
 model Donasi {
@@ -59,13 +60,14 @@ model Donasi {
   buktiPembayaran  String?
   status           StatusDonasi  @default(PENDING)
   createdAt        DateTime      @default(now())
-  
-  // 🟢 PERBAIKAN: Diberi '?' agar boleh bernilai null (opsional untuk donasi tanpa login)
+
   donaturId        Int?
   donatur          User?         @relation(fields: [donaturId], references: [id])
-  
+
   programId        Int
   program          ProgramDonasi @relation(fields: [programId], references: [id])
+
+  @@map("donasi")
 }
 
 model PenerimaBantuan {
@@ -76,9 +78,10 @@ model PenerimaBantuan {
   noHp              String
   alasan            String              @db.Text
   status            StatusPenerima      @default(VERIFIKASI)
-  
-  // Relasi
+
   penyaluranBantuan PenyaluranBantuan[]
+
+  @@map("penerimabantuan")
 }
 
 model PenyaluranBantuan {
@@ -86,10 +89,12 @@ model PenyaluranBantuan {
   jumlahBantuan Float
   tanggalSalur  DateTime        @default(now())
   keterangan    String
-  
-  // Relasi
+
   programId     Int
   program       ProgramDonasi   @relation(fields: [programId], references: [id])
+
   penerimaId    Int
   penerima      PenerimaBantuan @relation(fields: [penerimaId], references: [id])
+
+  @@map("penyaluranbantuan")
 }

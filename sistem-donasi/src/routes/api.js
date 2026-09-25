@@ -1,14 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const prisma = require("../db.js"); // sesuaikan path ke db.js kamu
 
 const authController = require("../controllers/authController");
 const programController = require("../controllers/programController");
 const donasiController = require("../controllers/donasiController");
 const adminController = require("../controllers/adminController");
 const { authenticateToken, isAdmin } = require("../middleware/authMiddleware");
-
-
 
 // --- ROUTES AUTENTIKASI ---
 router.post("/auth/register", authController.register);
@@ -23,6 +20,12 @@ router.post(
   authenticateToken,
   isAdmin,
   programController.createProgram,
+);
+router.delete(
+  "/program/:id",
+  authenticateToken,
+  isAdmin,
+  programController.deleteProgram,
 );
 
 // --- ROUTES DONASI & PENYALURAN ---
@@ -89,6 +92,12 @@ router.get(
   adminController.getDaftarDonatur,
 );
 router.get(
+  "/admin/donasi",
+  authenticateToken,
+  isAdmin,
+  donasiController.getAllDonasi,
+);
+router.get(
   "/admin/penerima-pending",
   authenticateToken,
   isAdmin,
@@ -127,9 +136,29 @@ router.get(
   donasiController.exportExcel,
 );
 
-// Check Connection with Database --
+// --- ROUTE SINKRONISASI DATA AWAL DATABASE (KHUSUS ADMIN) ---
+router.get(
+  "/system/seed-database",
+  authenticateToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const seedFn = require("../../prisma/seed");
+      await seedFn();
+      res.json({
+        success: true,
+        message: "Database berhasil di-reset dan diisi dengan seluruh data & akun awal!",
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
+
+// --- ROUTE HEALTH CHECK DATABASE ---
 router.get("/health/db", async (req, res) => {
   try {
+    const prisma = require("../db.js");
     await prisma.$queryRaw`SELECT 1`;
     res.status(200).json({ status: "ok", database: "connected" });
   } catch (err) {
@@ -138,5 +167,3 @@ router.get("/health/db", async (req, res) => {
 });
 
 module.exports = router;
-
-

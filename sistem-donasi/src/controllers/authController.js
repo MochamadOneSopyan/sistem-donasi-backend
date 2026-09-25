@@ -112,8 +112,10 @@ exports.login = async (req, res) => {
     }
 
     // Pembuatan Token JWT
-    const secretKey =
-      process.env.JWT_SECRET || "kunci_rahasia_skripsi_yayasan_2026";
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) {
+      return res.status(500).json({ message: "Konfigurasi server bermasalah: JWT_SECRET belum diatur." });
+    }
 
     const token = jwt.sign(
       { id: user.id, role: user.role, nama: user.nama },
@@ -155,8 +157,10 @@ exports.forgotPassword = async (req, res) => {
         .json({ message: "Alamat email tidak terdaftar di sistem kami." });
     }
 
-    const secretKey =
-      process.env.JWT_SECRET || "kunci_rahasia_skripsi_yayasan_2026";
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) {
+      return res.status(500).json({ message: "Konfigurasi server bermasalah: JWT_SECRET belum diatur." });
+    }
 
     const resetToken = jwt.sign({ id: user.id, email: user.email }, secretKey, {
       expiresIn: "15m",
@@ -200,8 +204,10 @@ exports.resetPasswordWithToken = async (req, res) => {
         .json({ message: "Password baru minimal 6 karakter." });
     }
 
-    const secretKey =
-      process.env.JWT_SECRET || "kunci_rahasia_skripsi_yayasan_2026";
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) {
+      return res.status(500).json({ message: "Konfigurasi server bermasalah: JWT_SECRET belum diatur." });
+    }
 
     let decoded;
     try {

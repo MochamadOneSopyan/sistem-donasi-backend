@@ -11,9 +11,12 @@ exports.authenticateToken = (req, res, next) => {
       .json({ message: "Akses ditolak! Token tidak ditemukan." });
   }
 
-  // Gunakan fallback key yang sama dengan authController.js
-  const secretKey =
-    process.env.JWT_SECRET || "kunci_rahasia_skripsi_yayasan_2026";
+  const secretKey = process.env.JWT_SECRET;
+  if (!secretKey) {
+    return res
+      .status(500)
+      .json({ message: "Konfigurasi server bermasalah: JWT_SECRET belum diatur." });
+  }
 
   jwt.verify(token, secretKey, (err, user) => {
     if (err) {

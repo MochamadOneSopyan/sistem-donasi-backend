@@ -155,5 +155,15 @@ router.get(
   },
 );
 
-module.exports = router;
+// --- ROUTE HEALTH CHECK DATABASE ---
+router.get("/health/db", async (req, res) => {
+  try {
+    const prisma = require("../db.js");
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: "ok", database: "connected" });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+});
 
+module.exports = router;

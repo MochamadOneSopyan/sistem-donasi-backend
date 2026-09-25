@@ -7,9 +7,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "echo 'No build step required'",
-    "postinstall": "node node_modules/prisma/build/index.js generate"
-    
+    "postinstall": "prisma skills sync || exit 0"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +15,7 @@
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -24,12 +23,11 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^10.0.10",
-    "pdfkit": "^0.20.2",
-    "prisma": "^5.22.0"
+    "pdfkit": "^0.20.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
-    
+    "nodemon": "^3.1.14",
+    "prisma": "^5.22.0"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
