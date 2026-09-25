@@ -21,3 +21,4 @@ npm-debug.log*
 .devin/
 .vscode/
 .idea/
+sistem-donasi/node_modules/
