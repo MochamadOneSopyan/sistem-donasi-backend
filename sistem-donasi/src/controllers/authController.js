@@ -42,6 +42,12 @@ exports.register = async (req, res) => {
     // Simpan data User
     const newUser = await prisma.user.create({
       data: createData,
+      select: {
+        id: true,
+        nama: true,
+        email: true,
+        role: true,
+      },
     });
 
     res.status(201).json({
@@ -72,7 +78,12 @@ exports.login = async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      include: {
+      select: {
+        id: true,
+        nama: true,
+        email: true,
+        password: true,
+        role: true,
         penerimaBantuan: true,
       },
     });
