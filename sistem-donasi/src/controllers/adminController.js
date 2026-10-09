@@ -277,15 +277,18 @@ exports.hapusUser = async (req, res) => {
 // 10. MENDAPATKAN RINGKASAN KEUANGAN (TOTAL MASUK, KELUAR, SALDO)
 exports.getSummaryKeuangan = async (req, res) => {
   try {
-    // 1. Hitung total donasi masuk yang statusnya BERHASIL
     const donasiMasuk = await prisma.donasi.aggregate({
       where: { status: "BERHASIL" },
       _sum: { jumlah: true },
     });
 
-    // 2. Hitung total penyaluran bantuan keluar
     const penyaluranKeluar = await prisma.penyaluranBantuan.aggregate({
       _sum: { jumlahBantuan: true },
+    });
+
+    // Hitung donasi pending
+    const donasiPending = await prisma.donasi.count({
+      where: { status: "PENDING" },
     });
 
     const totalMasuk = donasiMasuk._sum.jumlah || 0;
@@ -298,6 +301,7 @@ exports.getSummaryKeuangan = async (req, res) => {
         totalMasuk,
         totalKeluar,
         sisaSaldo,
+        donasiPending,
       },
     });
   } catch (error) {
@@ -308,3 +312,277 @@ exports.getSummaryKeuangan = async (req, res) => {
     });
   }
 };
+
+// ==========================================
+// FITUR PENGAJUAN BANTUAN
+// ==========================================
+
+// 11. Penerima mengajukan permohonan bantuan
+exports.buatPengajuan = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { judul, deskripsi, jumlahDiajukan } = req.body;
+
+    if (!judul || !deskripsi || !jumlahDiajukan) {
+      return res.status(400).json({
+        message: "Judul, deskripsi, dan jumlah yang diajukan wajib diisi.",
+      });
+    }
+
+    if (parseFloat(jumlahDiajukan) <= 0) {
+      return res.status(400).json({
+        message: "Jumlah yang diajukan harus lebih dari 0.",
+      });
+    }
+
+    const pengajuan = await prisma.pengajuanBantuan.create({
+      data: {
+        userId,
+        judul,
+        deskripsi,
+        jumlahDiajukan: parseFloat(jumlahDiajukan),
+        status: "MENUNGGU",
+      },
+      include: {
+        user: { select: { id: true, nama: true, email: true } },
+      },
+    });
+
+    res.status(201).json({
+      message: "Pengajuan bantuan berhasil dikirim! Menunggu verifikasi admin.",
+      data: pengajuan,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Gagal membuat pengajuan bantuan.",
+      error: error.message,
+    });
+  }
+};
+
+// 12. Penerima melihat daftar pengajuannya sendiri
+exports.getPengajuanSaya = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const pengajuanList = await prisma.pengajuanBantuan.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.status(200).json({ data: pengajuanList });
+  } catch (error) {
+    res.status(500).json({
+      message: "Gagal mengambil data pengajuan.",
+      error: error.message,
+    });
+  }
+};
+
+// 13. Admin melihat semua pengajuan bantuan
+exports.getAllPengajuan = async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const where = status ? { status } : {};
+
+    const pengajuanList = await prisma.pengajuanBantuan.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            nama: true,
+            email: true,
+            penerimaBantuan: {
+              select: { alamat: true, noHp: true, status: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.status(200).json({ data: pengajuanList });
+  } catch (error) {
+    res.status(500).json({
+      message: "Gagal mengambil data pengajuan.",
+      error: error.message,
+    });
+  }
+};
+
+// 14. Admin verifikasi pengajuan bantuan (DISETUJUI / DITOLAK)
+exports.verifikasiPengajuan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, catatanAdmin } = req.body;
+
+    if (!["DISETUJUI", "DITOLAK"].includes(status)) {
+      return res.status(400).json({
+        message: "Status tidak valid! Harus 'DISETUJUI' atau 'DITOLAK'.",
+      });
+    }
+
+    const pengajuan = await prisma.pengajuanBantuan.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!pengajuan) {
+      return res
+        .status(404)
+        .json({ message: "Data pengajuan tidak ditemukan." });
+    }
+
+    if (pengajuan.status !== "MENUNGGU") {
+      return res.status(400).json({
+        message: `Pengajuan sudah diproses sebelumnya dengan status: ${pengajuan.status}`,
+      });
+    }
+
+    const updated = await prisma.pengajuanBantuan.update({
+      where: { id: parseInt(id) },
+      data: {
+        status,
+        catatanAdmin: catatanAdmin || null,
+      },
+      include: {
+        user: { select: { id: true, nama: true, email: true } },
+      },
+    });
+
+    res.status(200).json({
+      message: `Pengajuan bantuan dari ${updated.user.nama} berhasil di-${status.toLowerCase()}!`,
+      data: updated,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Gagal memverifikasi pengajuan bantuan.",
+      error: error.message,
+    });
+  }
+};
+
+// ==========================================
+// FITUR PROFIL PENGGUNA
+// ==========================================
+
+// 15. User update profil sendiri
+exports.updateProfilSendiri = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { nama, noHp, alamat } = req.body;
+
+    if (!nama) {
+      return res.status(400).json({ message: "Nama tidak boleh kosong." });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { nama, noHp: noHp || null, alamat: alamat || null },
+      select: {
+        id: true,
+        nama: true,
+        email: true,
+        noHp: true,
+        alamat: true,
+        role: true,
+      },
+    });
+
+    res.status(200).json({
+      message: "Profil berhasil diperbarui!",
+      data: updated,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Gagal memperbarui profil.",
+      error: error.message,
+    });
+  }
+};
+
+// 16. User ganti password sendiri
+exports.gantiPasswordSendiri = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { passwordLama, passwordBaru } = req.body;
+
+    if (!passwordLama || !passwordBaru) {
+      return res.status(400).json({
+        message: "Password lama dan password baru wajib diisi.",
+      });
+    }
+
+    if (passwordBaru.length < 6) {
+      return res.status(400).json({
+        message: "Password baru minimal 6 karakter.",
+      });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    const isMatch = await bcrypt.compare(passwordLama, user.password);
+    if (!isMatch) {
+      return res
+        .status(400)
+        .json({ message: "Password lama tidak sesuai!" });
+    }
+
+    const hashedBaru = await bcrypt.hash(passwordBaru, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedBaru },
+    });
+
+    res
+      .status(200)
+      .json({ message: "Password berhasil diperbarui!" });
+  } catch (error) {
+    res.status(500).json({
+      message: "Gagal mengganti password.",
+      error: error.message,
+    });
+  }
+};
+
+// 17. Ambil profil sendiri
+exports.getProfilSendiri = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        nama: true,
+        email: true,
+        noHp: true,
+        alamat: true,
+        role: true,
+        createdAt: true,
+        penerimaBantuan: {
+          select: {
+            alamat: true,
+            noHp: true,
+            alasan: true,
+            status: true,
+          },
+        },
+        pengajuanBantuan: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
+      },
+    });
+
+    res.status(200).json({ data: user });
+  } catch (error) {
+    res.status(500).json({
+      message: "Gagal mengambil data profil.",
+      error: error.message,
+    });
+  }
+};
+

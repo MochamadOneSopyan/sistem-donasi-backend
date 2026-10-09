@@ -5,6 +5,7 @@ require("dotenv").config();
 const apiRoutes = require("./src/routes/api");
 
 const app = express();
+
 const allowedOrigins = [
   "https://yayasanmuliakaryabersama.netlify.app",
   "https://sistem-donasi-frontend-production.up.railway.app",
@@ -16,7 +17,12 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
+      // Request tanpa origin, misalnya Postman atau server-to-server
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Izinkan origin yang sudah terdaftar
       if (
         allowedOrigins.includes(origin) ||
         origin.endsWith(".vercel.app") ||
@@ -26,10 +32,13 @@ app.use(
       ) {
         return callback(null, true);
       }
-      return callback(null, true);
+
+      // Tolak origin yang tidak diizinkan
+      return callback(new Error("Not allowed by CORS"));
     },
+
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());
@@ -41,10 +50,13 @@ app.use("/uploads", express.static("uploads"));
 app.use("/api", apiRoutes);
 
 app.get("/", (req, res) => {
-  res.json({ message: "API Sistem Donasi Yayasan Siap Digunakan!" });
+  res.json({
+    message: "API Sistem Donasi Yayasan Siap Digunakan!",
+  });
 });
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server berjalan di http://0.0.0.0:${PORT}`);
 });

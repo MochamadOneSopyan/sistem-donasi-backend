@@ -25,27 +25,36 @@ enum StatusPenerima {
   DITOLAK
 }
 
+enum StatusPengajuan {
+  MENUNGGU
+  DISETUJUI
+  DITOLAK
+}
+
 model User {
-  id              Int              @id @default(autoincrement())
+  id              Int               @id @default(autoincrement())
   nama            String
-  email           String           @unique
+  email           String            @unique
   password        String
+  noHp            String?
+  alamat          String?
   role            Role
-  createdAt       DateTime         @default(now())
+  createdAt       DateTime          @default(now())
 
   donasi          Donasi[]
   penerimaBantuan PenerimaBantuan?
+  pengajuanBantuan PengajuanBantuan[]
 
   @@map("user")
 }
 
 model ProgramDonasi {
-  id                Int                 @id @default(autoincrement())
+  id                Int                  @id @default(autoincrement())
   judul             String
-  deskripsi         String              @db.Text
+  deskripsi         String               @db.Text
   targetDana        Float
-  terkumpul         Float               @default(0)
-  createdAt         DateTime            @default(now())
+  terkumpul         Float                @default(0)
+  createdAt         DateTime             @default(now())
 
   donasi            Donasi[]
   penyaluranBantuan PenyaluranBantuan[]
@@ -71,13 +80,13 @@ model Donasi {
 }
 
 model PenerimaBantuan {
-  id                Int                 @id @default(autoincrement())
-  userId            Int                 @unique
-  user              User                @relation(fields: [userId], references: [id])
+  id                Int                  @id @default(autoincrement())
+  userId            Int                  @unique
+  user              User                 @relation(fields: [userId], references: [id])
   alamat            String
   noHp              String
-  alasan            String              @db.Text
-  status            StatusPenerima      @default(VERIFIKASI)
+  alasan            String               @db.Text
+  status            StatusPenerima       @default(VERIFIKASI)
 
   penyaluranBantuan PenyaluranBantuan[]
 
@@ -97,4 +106,19 @@ model PenyaluranBantuan {
   penerima      PenerimaBantuan @relation(fields: [penerimaId], references: [id])
 
   @@map("penyaluranbantuan")
+}
+
+model PengajuanBantuan {
+  id          Int              @id @default(autoincrement())
+  userId      Int
+  user        User             @relation(fields: [userId], references: [id])
+  judul       String
+  deskripsi   String           @db.Text
+  jumlahDiajukan Float
+  status      StatusPengajuan  @default(MENUNGGU)
+  catatanAdmin String?         @db.Text
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("pengajuanbantuan")
 }

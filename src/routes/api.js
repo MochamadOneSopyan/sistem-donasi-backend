@@ -13,130 +13,56 @@ router.post("/auth/login", authController.login);
 router.post("/auth/forgot-password", authController.forgotPassword);
 router.post("/auth/reset-password", authController.resetPasswordWithToken);
 
+// --- ROUTES PROFIL PENGGUNA (Login Wajib) ---
+router.get("/profil", authenticateToken, adminController.getProfilSendiri);
+router.put("/profil", authenticateToken, adminController.updateProfilSendiri);
+router.put("/profil/ganti-password", authenticateToken, adminController.gantiPasswordSendiri);
+
 // --- ROUTES PROGRAM DONASI ---
 router.get("/program", programController.getAllProgram);
-router.post(
-  "/program",
-  authenticateToken,
-  isAdmin,
-  programController.createProgram,
-);
-router.delete(
-  "/program/:id",
-  authenticateToken,
-  isAdmin,
-  programController.deleteProgram,
-);
+router.post("/program", authenticateToken, isAdmin, programController.createProgram);
+router.delete("/program/:id", authenticateToken, isAdmin, programController.deleteProgram);
 
-// --- ROUTES DONASI & PENYALURAN ---
-// Middleware authenticateToken dibuang agar publik/anonim bisa donasi
+// --- ROUTES DONASI ---
 router.post("/donasi", donasiController.createDonasi);
-
-router.get(
-  "/donasi/saya",
-  authenticateToken,
-  donasiController.getRiwayatDonatur,
-);
+router.get("/donasi/saya", authenticateToken, donasiController.getRiwayatDonatur);
 router.get("/donasi/transparansi", donasiController.getLaporanTransparansi);
-router.post(
-  "/penyaluran",
-  authenticateToken,
-  isAdmin,
-  donasiController.createPenyaluran,
-);
+
+// Admin verifikasi donasi (FIX BUG: saldo hanya bertambah setelah diverifikasi)
+router.put("/donasi/:id/verifikasi", authenticateToken, isAdmin, donasiController.verifikasiDonasi);
+
+// --- ROUTES PENYALURAN ---
+router.post("/penyaluran", authenticateToken, isAdmin, donasiController.createPenyaluran);
+
+// --- ROUTES PENGAJUAN BANTUAN ---
+// Penerima: buat & lihat pengajuan milik sendiri
+router.post("/pengajuan", authenticateToken, adminController.buatPengajuan);
+router.get("/pengajuan/saya", authenticateToken, adminController.getPengajuanSaya);
+
+// Admin: lihat semua & verifikasi pengajuan
+router.get("/admin/pengajuan", authenticateToken, isAdmin, adminController.getAllPengajuan);
+router.put("/admin/pengajuan/:id/verifikasi", authenticateToken, isAdmin, adminController.verifikasiPengajuan);
 
 // --- ROUTES MANAJEMEN USER & PENGURUS (KHUSUS ADMIN) ---
-router.get(
-  "/admin/pengurus",
-  authenticateToken,
-  isAdmin,
-  adminController.getDaftarPengurus,
-);
-router.post(
-  "/admin/pengurus",
-  authenticateToken,
-  isAdmin,
-  adminController.tambahPengurus,
-);
-router.put(
-  "/admin/pengurus/:id/reset-password",
-  authenticateToken,
-  isAdmin,
-  adminController.resetPasswordPengurus,
-);
-router.get(
-  "/admin/summary-keuangan",
-  authenticateToken,
-  isAdmin,
-  adminController.getSummaryKeuangan,
-);
+router.get("/admin/pengurus", authenticateToken, isAdmin, adminController.getDaftarPengurus);
+router.post("/admin/pengurus", authenticateToken, isAdmin, adminController.tambahPengurus);
+router.put("/admin/pengurus/:id/reset-password", authenticateToken, isAdmin, adminController.resetPasswordPengurus);
+router.get("/admin/summary-keuangan", authenticateToken, isAdmin, adminController.getSummaryKeuangan);
 
-router.get(
-  "/admin/pengurus",
-  authenticateToken,
-  isAdmin,
-  adminController.getDaftarPengurus,
-);
-
-// 🟢 RUTE TAMBAHAN: MANAJEMEN PENERIMA BANTUAN & DONATUR
-router.get(
-  "/admin/penerima",
-  authenticateToken,
-  isAdmin,
-  adminController.getDaftarPenerima,
-);
-router.get(
-  "/admin/donatur",
-  authenticateToken,
-  isAdmin,
-  adminController.getDaftarDonatur,
-);
-router.get(
-  "/admin/donasi",
-  authenticateToken,
-  isAdmin,
-  donasiController.getAllDonasi,
-);
-router.get(
-  "/admin/penerima-pending",
-  authenticateToken,
-  isAdmin,
-  adminController.getPenerimaBantuanPending,
-);
-router.put(
-  "/admin/verifikasi-penerima/:id",
-  authenticateToken,
-  isAdmin,
-  adminController.verifikasiPenerimaBantuan,
-);
-router.put(
-  "/admin/user/:id",
-  authenticateToken,
-  isAdmin,
-  adminController.updateUser,
-);
-router.delete(
-  "/admin/user/:id",
-  authenticateToken,
-  isAdmin,
-  adminController.hapusUser,
-);
+// Manajemen penerima, donatur, dan donasi
+router.get("/admin/penerima", authenticateToken, isAdmin, adminController.getDaftarPenerima);
+router.get("/admin/donatur", authenticateToken, isAdmin, adminController.getDaftarDonatur);
+router.get("/admin/donasi", authenticateToken, isAdmin, donasiController.getAllDonasi);
+router.get("/admin/penerima-pending", authenticateToken, isAdmin, adminController.getPenerimaBantuanPending);
+router.put("/admin/verifikasi-penerima/:id", authenticateToken, isAdmin, adminController.verifikasiPenerimaBantuan);
+router.put("/admin/user/:id", authenticateToken, isAdmin, adminController.updateUser);
+router.delete("/admin/user/:id", authenticateToken, isAdmin, adminController.hapusUser);
 
 // --- ROUTES EXPORT LAPORAN ---
-router.get(
-  "/laporan/pdf",
-  authenticateToken,
-  isAdmin,
-  donasiController.exportPDF,
-);
-router.get(
-  "/laporan/excel",
-  authenticateToken,
-  isAdmin,
-  donasiController.exportExcel,
-);
+router.get("/laporan/pdf", authenticateToken, isAdmin, donasiController.exportPDF);
+router.get("/laporan/excel", authenticateToken, isAdmin, donasiController.exportExcel);
 
-// --- ROUTE SINKRONISASI DATA AWAL DATABASE (KHUSUS ADMIN) ---
+// --- ROUTE SINKRONISASI DATA AWAL DATABASE ---
 router.get(
   "/system/seed-database",
   authenticateToken,

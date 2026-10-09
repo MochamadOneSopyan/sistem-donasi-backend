@@ -8,6 +8,8 @@ const jwt = require("jsonwebtoken");
 // ==========================================
 
 // 1. Donatur Mengirim Donasi Online (Publik & Terdaftar)
+// BUG FIX: Donasi disimpan dengan status PENDING dulu.
+// Saldo program HANYA bertambah saat admin verifikasi donasi menjadi BERHASIL.
 exports.createDonasi = async (req, res) => {
   try {
     const { programId, jumlah, metodePembayaran, donaturId } = req.body;
@@ -22,10 +24,10 @@ exports.createDonasi = async (req, res) => {
       programId: parseInt(programId),
       jumlah: parseFloat(jumlah),
       metodePembayaran: metodePembayaran || "QRIS",
-      status: "BERHASIL",
+      status: "PENDING", // FIX: Selalu PENDING dulu, tidak langsung BERHASIL
     };
 
-    // 1. Ambil donaturId dari token Authorization jika ada
+    // Ambil donaturId dari token Authorization jika ada
     if (req.headers && req.headers.authorization) {
       try {
         const authHeader = req.headers.authorization;
@@ -43,17 +45,14 @@ exports.createDonasi = async (req, res) => {
       }
     }
 
-    // 2. Jika belum ada dari token, gunakan dari req.user jika diset middleware
     if (!payloadDonasi.donaturId && req.user && req.user.id) {
       payloadDonasi.donaturId = req.user.id;
     }
 
-    // 3. Jika dikirim dari body
     if (!payloadDonasi.donaturId && donaturId) {
       payloadDonasi.donaturId = parseInt(donaturId);
     }
 
-    // 1. Simpan Transaksi Donasi
     const donasi = await prisma.donasi.create({
       data: payloadDonasi,
       include: {
@@ -66,28 +65,9 @@ exports.createDonasi = async (req, res) => {
       },
     });
 
-    // 2. Update Saldo Terkumpul pada Program
-    try {
-      if (prisma.program) {
-        await prisma.program.update({
-          where: { id: parseInt(programId) },
-          data: { terkumpul: { increment: parseFloat(jumlah) } },
-        });
-      } else if (prisma.programDonasi) {
-        await prisma.programDonasi.update({
-          where: { id: parseInt(programId) },
-          data: { terkumpul: { increment: parseFloat(jumlah) } },
-        });
-      }
-    } catch (errUpdate) {
-      console.warn(
-        "Peringatan: Gagal update saldo program, namun transaksi donasi tetap berhasil dicatat:",
-        errUpdate.message,
-      );
-    }
-
     res.status(201).json({
-      message: "Donasi berhasil disalurkan! Terima kasih atas kepedulian Anda.",
+      message:
+        "Donasi berhasil dicatat! Menunggu verifikasi dari pengurus yayasan.",
       data: donasi,
     });
   } catch (error) {
@@ -96,7 +76,62 @@ exports.createDonasi = async (req, res) => {
   }
 };
 
-// 2. Ambil Riwayat Donasi Pribadi Donatur Login
+// 2. Admin Verifikasi Donasi (BERHASIL / GAGAL)
+// Saldo program hanya bertambah saat admin set status BERHASIL
+exports.verifikasiDonasi = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["BERHASIL", "GAGAL"].includes(status)) {
+      return res.status(400).json({
+        message: "Status tidak valid! Harus 'BERHASIL' atau 'GAGAL'.",
+      });
+    }
+
+    const donasi = await prisma.donasi.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!donasi) {
+      return res.status(404).json({ message: "Data donasi tidak ditemukan." });
+    }
+
+    if (donasi.status !== "PENDING") {
+      return res.status(400).json({
+        message: `Donasi sudah diverifikasi sebelumnya dengan status: ${donasi.status}`,
+      });
+    }
+
+    // Update status donasi
+    const updated = await prisma.donasi.update({
+      where: { id: parseInt(id) },
+      data: { status },
+      include: {
+        program: { select: { id: true, judul: true } },
+        donatur: { select: { id: true, nama: true } },
+      },
+    });
+
+    // Jika BERHASIL, baru tambah saldo program
+    if (status === "BERHASIL") {
+      await prisma.programDonasi.update({
+        where: { id: donasi.programId },
+        data: { terkumpul: { increment: donasi.jumlah } },
+      });
+    }
+
+    res.status(200).json({
+      message: `Donasi berhasil diverifikasi sebagai ${status}!`,
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Error verifikasiDonasi:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// 3. Ambil Riwayat Donasi Pribadi Donatur Login
 exports.getRiwayatDonatur = async (req, res) => {
   try {
     const donaturId = req.user.id;
@@ -117,10 +152,11 @@ exports.getRiwayatDonatur = async (req, res) => {
   }
 };
 
-// 3. Rekap Transparansi Dana (Publik / Donatur)
+// 4. Rekap Transparansi Dana (Publik / Donatur) - hanya hitung yang BERHASIL
 exports.getLaporanTransparansi = async (req, res) => {
   try {
     const totalDonasi = await prisma.donasi.aggregate({
+      where: { status: "BERHASIL" },
       _sum: { jumlah: true },
     });
 
@@ -141,7 +177,7 @@ exports.getLaporanTransparansi = async (req, res) => {
 // MODUL PENGURUS (ADMIN) & REPORTING
 // ==========================================
 
-// 4. Pengurus Menyalurkan Bantuan ke Penerima
+// 5. Pengurus Menyalurkan Bantuan ke Penerima
 exports.createPenyaluran = async (req, res) => {
   try {
     const { programId, penerimaId, jumlah, jumlahBantuan, keterangan } =
@@ -155,7 +191,6 @@ exports.createPenyaluran = async (req, res) => {
       });
     }
 
-    // Pengecekan ID Penerima (Apakah ID Tabel PenerimaBantuan atau ID User)
     let validPenerimaId = parseInt(penerimaId);
     const profilPenerima = await prisma.penerimaBantuan.findFirst({
       where: {
@@ -186,7 +221,7 @@ exports.createPenyaluran = async (req, res) => {
   }
 };
 
-// 5. Export Laporan Program ke PDF (Menggunakan PDFKit)
+// 6. Export Laporan Program ke PDF
 exports.exportPDF = async (req, res) => {
   try {
     const penyaluranList = await prisma.penyaluranBantuan.findMany({
@@ -206,7 +241,6 @@ exports.exportPDF = async (req, res) => {
 
     doc.pipe(res);
 
-    // Header Laporan
     doc
       .fontSize(16)
       .text("LAPORAN PENYALURAN BANTUAN YAYASAN MULIA KARYA BERSAMA", {
@@ -218,13 +252,11 @@ exports.exportPDF = async (req, res) => {
       .text(`Tanggal Cetak: ${new Date().toLocaleDateString("id-ID")}`);
     doc.moveDown();
 
-    // Isi Data
     if (penyaluranList.length === 0) {
       doc.fontSize(10).text("Belum ada data penyaluran bantuan.");
     } else {
       penyaluranList.forEach((item, index) => {
-        const namaProgram =
-          item.program?.judul || item.program?.namaProgram || "Program Donasi";
+        const namaProgram = item.program?.judul || "Program Donasi";
         const namaPenerima = item.penerima?.user?.nama || "Penerima Bantuan";
         const nominal = (item.jumlahBantuan || 0).toLocaleString("id-ID");
 
@@ -243,7 +275,7 @@ exports.exportPDF = async (req, res) => {
   }
 };
 
-// 6. Export Laporan Program ke Excel (Menggunakan ExcelJS)
+// 7. Export Laporan ke Excel
 exports.exportExcel = async (req, res) => {
   try {
     const penyaluranList = await prisma.penyaluranBantuan.findMany({
@@ -272,7 +304,7 @@ exports.exportExcel = async (req, res) => {
 
       worksheet.addRow({
         no: index + 1,
-        program: item.program?.judul || item.program?.namaProgram || "-",
+        program: item.program?.judul || "-",
         penerima: item.penerima?.user?.nama || "-",
         jumlah: item.jumlahBantuan || 0,
         keterangan: item.keterangan || "-",
@@ -297,7 +329,7 @@ exports.exportExcel = async (req, res) => {
   }
 };
 
-// 7. Ambil Semua Transaksi Donasi Masuk (Khusus Pengurus / Admin)
+// 8. Ambil Semua Transaksi Donasi Masuk (Khusus Admin)
 exports.getAllDonasi = async (req, res) => {
   try {
     const listDonasi = await prisma.donasi.findMany({
