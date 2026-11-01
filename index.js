@@ -41,9 +41,12 @@ app.use(
   }),
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
-// Akses publik untuk folder uploads gambar
+// Bukti pembayaran berisi data transaksi pribadi dan hanya dilayani lewat API berizin.
+app.use("/uploads/bukti", (_req, res) => res.status(403).json({ message: "Bukti pembayaran memerlukan akses akun." }));
+// Gambar publik lainnya tetap tersedia.
 app.use("/uploads", express.static("uploads"));
 
 // Fungsi sinkronisasi skema database otomatis (menambahkan kolom & tabel baru jika belum ada)
@@ -62,22 +65,25 @@ async function autoMigrate() {
         \`role\` ENUM('PENGURUS', 'DONATUR', 'PENERIMA_BANTUAN') NOT NULL,
         \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `);
 
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS \`programdonasi\` (
         \`id\` INT AUTO_INCREMENT PRIMARY KEY,
         \`judul\` VARCHAR(191) NOT NULL,
         \`deskripsi\` TEXT NOT NULL,
+        \`imageUrl\` TEXT NULL,
+        \`imagePublicId\` VARCHAR(191) NULL,
         \`targetDana\` DOUBLE NOT NULL,
         \`terkumpul\` DOUBLE NOT NULL DEFAULT 0,
         \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `);
 
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS \`donasi\` (
         \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`requestId\` VARCHAR(64) NULL UNIQUE,
         \`jumlah\` DOUBLE NOT NULL,
         \`metodePembayaran\` VARCHAR(191) NOT NULL DEFAULT 'TRANSFER_BANK',
         \`buktiPembayaran\` VARCHAR(191) NULL,
@@ -86,7 +92,7 @@ async function autoMigrate() {
         \`donaturId\` INT NULL,
         \`programId\` INT NOT NULL
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `);
 
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS \`penerimabantuan\` (
@@ -97,7 +103,7 @@ async function autoMigrate() {
         \`alasan\` TEXT NOT NULL,
         \`status\` ENUM('VERIFIKASI', 'DISETUJUI', 'DITOLAK') NOT NULL DEFAULT 'VERIFIKASI'
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `);
 
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS \`penyaluranbantuan\` (
@@ -108,7 +114,7 @@ async function autoMigrate() {
         \`programId\` INT NOT NULL,
         \`penerimaId\` INT NOT NULL
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `);
 
     // 2. Tambah kolom noHp & alamat ke tabel user jika belum ada
     const cols = await prisma.$queryRawUnsafe(`
@@ -125,6 +131,27 @@ async function autoMigrate() {
       await prisma.$executeRawUnsafe("ALTER TABLE `user` ADD COLUMN `alamat` VARCHAR(191) NULL");
       console.log("✅ Kolom alamat berhasil ditambahkan ke tabel user");
     }
+    if (!colNames.includes("fotoProfil")) {
+      await prisma.$executeRawUnsafe("ALTER TABLE `user` ADD COLUMN `fotoProfil` TEXT NULL");
+      console.log("✅ Kolom fotoProfil berhasil ditambahkan ke tabel user");
+    }
+
+    const donationColumns = await prisma.$queryRawUnsafe("SHOW COLUMNS FROM `donasi`");
+    if (!donationColumns.some((column) => column.Field === "requestId")) {
+      await prisma.$executeRawUnsafe("ALTER TABLE `donasi` ADD COLUMN `requestId` VARCHAR(64) NULL UNIQUE");
+      console.log("Kolom requestId berhasil ditambahkan ke tabel donasi");
+    }
+
+    const programColumns = await prisma.$queryRawUnsafe("SHOW COLUMNS FROM `programdonasi`");
+    if (!programColumns.some((column) => column.Field === "imageUrl")) {
+      await prisma.$executeRawUnsafe("ALTER TABLE `programdonasi` ADD COLUMN `imageUrl` TEXT NULL");
+      console.log("✅ Kolom imageUrl berhasil ditambahkan ke tabel programdonasi");
+    }
+
+    if (!programColumns.some((column) => column.Field === "imagePublicId")) {
+      await prisma.$executeRawUnsafe("ALTER TABLE `programdonasi` ADD COLUMN `imagePublicId` VARCHAR(191) NULL");
+      console.log("Kolom imagePublicId berhasil ditambahkan ke tabel programdonasi");
+    }
 
     // 3. Tambah tabel pengajuanbantuan
     await prisma.$executeRawUnsafe(`
@@ -134,29 +161,26 @@ async function autoMigrate() {
         \`judul\` VARCHAR(191) NOT NULL,
         \`deskripsi\` TEXT NOT NULL,
         \`jumlahDiajukan\` DOUBLE NOT NULL,
-        \`status\` ENUM('MENUNGGU', 'DISETUJUI', 'DITOLAK') NOT NULL DEFAULT 'MENUNGGU',
+        \`status\` ENUM('MENUNGGU', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN') NOT NULL DEFAULT 'MENUNGGU',
         \`catatanAdmin\` TEXT NULL,
         \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
         CONSTRAINT \`fk_pengajuan_user\` FOREIGN KEY (\`userId\`) REFERENCES \`user\`(\`id\`) ON DELETE CASCADE
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    `).catch(() => {});
+    `);
+
+    const applicationStatusColumns = await prisma.$queryRawUnsafe("SHOW COLUMNS FROM `pengajuanbantuan` LIKE 'status'");
+    if (applicationStatusColumns.length && !String(applicationStatusColumns[0].Type).includes("'DIBATALKAN'")) {
+      await prisma.$executeRawUnsafe("ALTER TABLE `pengajuanbantuan` MODIFY COLUMN `status` ENUM('MENUNGGU', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN') NOT NULL DEFAULT 'MENUNGGU'");
+      console.log("Status DIBATALKAN berhasil ditambahkan ke pengajuan bantuan");
+    }
 
     console.log("✅ Database schema sync selesai.");
   } catch (err) {
-    console.warn("⚠️ Warning autoMigrate:", err.message);
+    console.error("Gagal menyinkronkan skema database:", err);
+    throw err;
   }
 }
-
-// Endpoint manual untuk sinkronisasi database
-app.get("/api/system/sync-db", async (req, res) => {
-  try {
-    await autoMigrate();
-    res.json({ success: true, message: "Database schema berhasil disinkronkan!" });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 // Hubungkan Rute API
 app.use("/api", apiRoutes);
@@ -169,7 +193,18 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, "0.0.0.0", async () => {
-  console.log(`🚀 Server berjalan di http://0.0.0.0:${PORT}`);
+async function start() {
+  if (!process.env.DATABASE_URL?.startsWith("mysql://")) {
+    throw new Error("DATABASE_URL harus memakai MySQL (mysql://) sesuai skema Prisma.");
+  }
   await autoMigrate();
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server berjalan di http://0.0.0.0:${PORT}`);
+  });
+}
+
+start().catch(async (error) => {
+  console.error("Server tidak dapat dimulai:", error);
+  await require("./src/db").$disconnect();
+  process.exitCode = 1;
 });

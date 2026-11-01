@@ -29,6 +29,7 @@ enum StatusPengajuan {
   MENUNGGU
   DISETUJUI
   DITOLAK
+  DIBATALKAN
 }
 
 model User {
@@ -38,6 +39,7 @@ model User {
   password        String
   noHp            String?
   alamat          String?
+  fotoProfil      String?           @db.Text
   role            Role
   createdAt       DateTime          @default(now())
 
@@ -52,6 +54,8 @@ model ProgramDonasi {
   id                Int                  @id @default(autoincrement())
   judul             String
   deskripsi         String               @db.Text
+  imageUrl          String?              @db.Text
+  imagePublicId     String?              @db.VarChar(191)
   targetDana        Float
   terkumpul         Float                @default(0)
   createdAt         DateTime             @default(now())
@@ -64,6 +68,7 @@ model ProgramDonasi {
 
 model Donasi {
   id               Int           @id @default(autoincrement())
+  requestId        String?       @unique @db.VarChar(64)
   jumlah           Float
   metodePembayaran String        @default("TRANSFER_BANK")
   buktiPembayaran  String?

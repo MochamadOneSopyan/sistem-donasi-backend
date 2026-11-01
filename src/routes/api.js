@@ -6,6 +6,7 @@ const programController = require("../controllers/programController");
 const donasiController = require("../controllers/donasiController");
 const adminController = require("../controllers/adminController");
 const { authenticateToken, isAdmin } = require("../middleware/authMiddleware");
+const programImageUpload = require("../middleware/programImageUpload");
 
 // --- ROUTES AUTENTIKASI ---
 router.post("/auth/register", authController.register);
@@ -17,14 +18,20 @@ router.post("/auth/reset-password", authController.resetPasswordWithToken);
 router.get("/profil", authenticateToken, adminController.getProfilSendiri);
 router.put("/profil", authenticateToken, adminController.updateProfilSendiri);
 router.put("/profil/ganti-password", authenticateToken, adminController.gantiPasswordSendiri);
+router.put("/profil/foto", authenticateToken, adminController.uploadFotoProfil);
+router.delete("/profil/foto", authenticateToken, adminController.hapusFotoProfil);
 
 // --- ROUTES PROGRAM DONASI ---
 router.get("/program", programController.getAllProgram);
-router.post("/program", authenticateToken, isAdmin, programController.createProgram);
+router.post("/program", authenticateToken, isAdmin, programImageUpload, programController.createProgram);
+router.put("/program/:id", authenticateToken, isAdmin, programImageUpload, programController.updateProgram);
 router.delete("/program/:id", authenticateToken, isAdmin, programController.deleteProgram);
 
 // --- ROUTES DONASI ---
 router.post("/donasi", donasiController.createDonasi);
+router.put("/donasi/:id/bukti", donasiController.uploadBuktiDonasi);
+router.get("/donasi/:id/bukti", authenticateToken, donasiController.getBuktiDonasi);
+router.delete("/donasi/:id/bukti", authenticateToken, isAdmin, donasiController.deleteBuktiDonasi);
 router.get("/donasi/saya", authenticateToken, donasiController.getRiwayatDonatur);
 router.get("/donasi/transparansi", donasiController.getLaporanTransparansi);
 
@@ -33,11 +40,13 @@ router.put("/donasi/:id/verifikasi", authenticateToken, isAdmin, donasiControlle
 
 // --- ROUTES PENYALURAN ---
 router.post("/penyaluran", authenticateToken, isAdmin, donasiController.createPenyaluran);
+router.get("/penyaluran/saya", authenticateToken, donasiController.getPenyaluranSaya);
 
 // --- ROUTES PENGAJUAN BANTUAN ---
 // Penerima: buat & lihat pengajuan milik sendiri
 router.post("/pengajuan", authenticateToken, adminController.buatPengajuan);
 router.get("/pengajuan/saya", authenticateToken, adminController.getPengajuanSaya);
+router.patch("/pengajuan/:id/batalkan", authenticateToken, adminController.batalkanPengajuan);
 
 // Admin: lihat semua & verifikasi pengajuan
 router.get("/admin/pengajuan", authenticateToken, isAdmin, adminController.getAllPengajuan);
@@ -61,25 +70,6 @@ router.delete("/admin/user/:id", authenticateToken, isAdmin, adminController.hap
 // --- ROUTES EXPORT LAPORAN ---
 router.get("/laporan/pdf", authenticateToken, isAdmin, donasiController.exportPDF);
 router.get("/laporan/excel", authenticateToken, isAdmin, donasiController.exportExcel);
-
-// --- ROUTE SINKRONISASI DATA AWAL DATABASE ---
-router.get(
-  "/system/seed-database",
-  authenticateToken,
-  isAdmin,
-  async (req, res) => {
-    try {
-      const seedFn = require("../../prisma/seed");
-      await seedFn();
-      res.json({
-        success: true,
-        message: "Database berhasil di-reset dan diisi dengan seluruh data & akun awal!",
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  },
-);
 
 // --- ROUTE HEALTH CHECK DATABASE ---
 router.get("/health/db", async (req, res) => {

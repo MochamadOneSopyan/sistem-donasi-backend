@@ -47,6 +47,7 @@ exports.register = async (req, res) => {
         nama: true,
         email: true,
         role: true,
+
       },
     });
 
@@ -84,6 +85,7 @@ exports.login = async (req, res) => {
         email: true,
         password: true,
         role: true,
+
         penerimaBantuan: true,
       },
     });
@@ -142,6 +144,7 @@ exports.login = async (req, res) => {
         nama: user.nama,
         email: user.email,
         role: user.role,
+        fotoProfil: null,
       },
     });
   } catch (error) {

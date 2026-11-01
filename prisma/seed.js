@@ -5,17 +5,21 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Memulai seeding database...");
 
-  // =====================================================
-  // 1. BERSIHKAN DATA LAMA
-  // =====================================================
+  const existingRows = await Promise.all([
+    prisma.user.count(),
+    prisma.programDonasi.count(),
+    prisma.penerimaBantuan.count(),
+    prisma.donasi.count(),
+    prisma.penyaluranBantuan.count(),
+    prisma.pengajuanBantuan.count(),
+  ]);
+  if (existingRows.some((count) => count > 0)) {
+    throw new Error("Seed hanya boleh dijalankan pada database kosong agar data yayasan tidak tertimpa atau tercampur dengan data contoh.");
+  }
 
-  await prisma.penyaluranBantuan.deleteMany();
-  await prisma.donasi.deleteMany();
-  await prisma.penerimaBantuan.deleteMany();
-  await prisma.programDonasi.deleteMany();
-  await prisma.user.deleteMany();
-
-  console.log("🧹 Data lama dibersihkan");
+  // =====================================================
+  // 1. PASTIKAN DATABASE MASIH KOSONG
+  // =====================================================
 
   // =====================================================
   // 2. USER
@@ -118,8 +122,7 @@ async function main() {
       {
         id: 1,
         judul: "Bantuan Pangan Lansia 2026",
-        deskripsi:
-          "Program pengadaan paket sembako untuk lansia kurang mampu.",
+        deskripsi: "Program pengadaan paket sembako untuk lansia kurang mampu.",
         targetDana: 10000000,
         terkumpul: 3160000,
         createdAt: new Date("2026-09-14T17:55:09.942Z"),
