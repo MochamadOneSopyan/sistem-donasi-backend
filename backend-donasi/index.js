@@ -7,11 +7,15 @@ const { getUploadsDir } = require("./src/uploadPaths");
 
 const app = express();
 
-let configuredClientOrigin;
-try {
-  configuredClientOrigin = new URL(process.env.CLIENT_URL).origin;
-} catch {
-  configuredClientOrigin = null;
+let configuredClientOrigin = null;
+if (process.env.CLIENT_URL) {
+  try {
+    const rawUrl = process.env.CLIENT_URL.trim();
+    const withProtocol = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    configuredClientOrigin = new URL(withProtocol).origin;
+  } catch {
+    configuredClientOrigin = null;
+  }
 }
 
 const allowedOrigins = [
@@ -19,11 +23,12 @@ const allowedOrigins = [
   "https://sistem-donasi-yayasan.vercel.app",
   "https://sistem-donasi-frontend-production.up.railway.app",
   "https://www.yayasanmuliakaryabersama.my.id",
+  "https://yayasanmuliakaryabersama.my.id",
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:5174",
   configuredClientOrigin,
-];
+].filter(Boolean);
 
 app.use(
   cors({
@@ -33,16 +38,21 @@ app.use(
         return callback(null, true);
       }
 
-      // Izinkan origin yang sudah terdaftar
+      // Izinkan origin yang sudah terdaftar atau domain deployment resmi
       if (
         allowedOrigins.includes(origin) ||
+        origin.endsWith(".yayasanmuliakaryabersama.my.id") ||
+        origin.endsWith(".up.railway.app") ||
+        origin.endsWith(".vercel.app") ||
+        origin.endsWith(".netlify.app") ||
         origin.startsWith("http://localhost:")
       ) {
         return callback(null, true);
       }
 
-      // Tolak origin yang tidak diizinkan
-      return callback(new Error("Not allowed by CORS"));
+      // Tolak origin yang tidak diizinkan tanpa melempar unhandled Error stack trace
+      console.warn(`CORS blocked request from origin: ${origin}`);
+      return callback(null, false);
     },
 
     credentials: true,
