@@ -33,7 +33,7 @@ test("pendaftaran publik tidak dapat membuat akun pengurus", async () => {
   const db = { user: { findUnique: () => { throw new Error("Database tidak boleh diakses"); } } };
   await withController(db, async () => {}, async (controller) => {
     const res = response();
-    await controller.register({ body: { nama: "Seseorang", email: "a@example.com", password: "password123", role: "PENGURUS" } }, res);
+    await controller.register({ body: { nama: "Seseorang", email: "a@example.com", password: "password123", role: "ADMIN_SISTEM" } }, res);
     assert.equal(res.statusCode, 400);
     assert.match(res.body.message, /Peran/);
   });
