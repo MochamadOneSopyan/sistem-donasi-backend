@@ -18,6 +18,7 @@ const allowedOrigins = [
   "https://yayasanmuliakaryabersama.netlify.app",
   "https://sistem-donasi-yayasan.vercel.app",
   "https://sistem-donasi-frontend-production.up.railway.app",
+  "https://www.yayasanmuliakaryabersama.my.id",
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:5174",
