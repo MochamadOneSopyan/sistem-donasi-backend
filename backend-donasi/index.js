@@ -1,9 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-require("./src/configureDatabaseTls")();
 
 const apiRoutes = require("./src/routes/api");
+const { getUploadsDir } = require("./src/uploadPaths");
 
 const app = express();
 
@@ -17,6 +17,7 @@ try {
 const allowedOrigins = [
   "https://yayasanmuliakaryabersama.netlify.app",
   "https://sistem-donasi-yayasan.vercel.app",
+  "https://sistem-donasi-frontend-production.up.railway.app",
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:5174",
@@ -53,7 +54,7 @@ app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 // Bukti pembayaran berisi data transaksi pribadi dan hanya dilayani lewat API berizin.
 app.use("/uploads/bukti", (_req, res) => res.status(403).json({ message: "Bukti pembayaran memerlukan akses akun." }));
 // Gambar publik lainnya tetap tersedia.
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(getUploadsDir()));
 
 // Fungsi sinkronisasi skema database otomatis (menambahkan kolom & tabel baru jika belum ada)
 async function autoMigrate() {
@@ -68,7 +69,7 @@ async function autoMigrate() {
         \`password\` VARCHAR(191) NOT NULL,
         \`noHp\` VARCHAR(191) NULL,
         \`alamat\` VARCHAR(191) NULL,
-        \`role\` ENUM('PENGURUS', 'DONATUR', 'PENERIMA_BANTUAN') NOT NULL,
+        \`role\` ENUM('DONATUR', 'PENERIMA_BANTUAN', 'ADMIN_SISTEM', 'BIDANG_INFORMATIKA', 'KETUA', 'BENDAHARA', 'SEKRETARIS', 'BIDANG_SOSIAL', 'BIDANG_PENDIDIKAN', 'BIDANG_KESEHATAN', 'HUMAS', 'PENGAWAS', 'PEMBINA') NOT NULL,
         \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     `);
@@ -159,6 +160,14 @@ async function autoMigrate() {
       console.log("Kolom imagePublicId berhasil ditambahkan ke tabel programdonasi");
     }
 
+    // 2b. Perluas enum role user untuk RBAC (jabatan pengurus)
+    const roleColumns = await prisma.$queryRawUnsafe("SHOW COLUMNS FROM `user` LIKE 'role'");
+    if (roleColumns.length && (!String(roleColumns[0].Type).includes("'ADMIN_SISTEM'") || String(roleColumns[0].Type).includes("'PENGURUS'"))) {
+      await prisma.$executeRawUnsafe("DELETE FROM `user` WHERE CAST(`role` AS CHAR) = 'PENGURUS'");
+      await prisma.$executeRawUnsafe("ALTER TABLE `user` MODIFY COLUMN `role` ENUM('DONATUR', 'PENERIMA_BANTUAN', 'ADMIN_SISTEM', 'BIDANG_INFORMATIKA', 'KETUA', 'BENDAHARA', 'SEKRETARIS', 'BIDANG_SOSIAL', 'BIDANG_PENDIDIKAN', 'BIDANG_KESEHATAN', 'HUMAS', 'PENGAWAS', 'PEMBINA') NOT NULL");
+      console.log("✅ Role RBAC (13 role murni) berhasil disinkronkan ke tabel user");
+    }
+
     // 3. Tambah tabel pengajuanbantuan
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS \`pengajuanbantuan\` (
@@ -180,6 +189,10 @@ async function autoMigrate() {
       await prisma.$executeRawUnsafe("ALTER TABLE `pengajuanbantuan` MODIFY COLUMN `status` ENUM('MENUNGGU', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN') NOT NULL DEFAULT 'MENUNGGU'");
       console.log("Status DIBATALKAN berhasil ditambahkan ke pengajuan bantuan");
     }
+
+    // 4. Sinkronisasi 13 akun resmi pengurus & role RBAC
+    const { syncRoleAccounts } = require("./scripts/seedRoleAccounts");
+    await syncRoleAccounts();
 
     console.log("✅ Database schema sync selesai.");
   } catch (err) {
@@ -209,12 +222,10 @@ async function start() {
   });
 }
 
-if (process.env.VERCEL !== "1") {
-  start().catch(async (error) => {
-    console.error("Server tidak dapat dimulai:", error);
-    await require("./src/db").$disconnect();
-    process.exitCode = 1;
-  });
-}
+start().catch(async (error) => {
+  console.error("Server tidak dapat dimulai:", error);
+  await require("./src/db").$disconnect();
+  process.exitCode = 1;
+});
 
 module.exports = app;

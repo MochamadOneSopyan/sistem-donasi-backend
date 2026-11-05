@@ -6,9 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "seed:roles": "node scripts/seedRoleAccounts.js",
     "test": "node --test",
     "build": "echo 'No build step required'",
-    "vercel-build": "node scripts/vercel-build.js",
     "postinstall": "node node_modules/prisma/build/index.js generate"
   },
   "keywords": [],
