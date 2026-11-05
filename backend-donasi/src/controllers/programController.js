@@ -1,5 +1,6 @@
 const prisma = require("../db");
 const jwt = require("jsonwebtoken");
+const { isStaff } = require("../roles");
 const { uploadProgramImage, deleteProgramImage, isManagedProgramImage, assertProgramImageStorageReady } = require("../services/programImageStorage");
 
 function programId(value) {
@@ -47,7 +48,7 @@ exports.getAllProgram = async (req, res) => {
     let admin = false;
     try {
       const token = req.headers?.authorization?.replace(/^Bearer\s+/i, "");
-      if (token && process.env.JWT_SECRET) admin = jwt.verify(token, process.env.JWT_SECRET).role === "PENGURUS";
+      if (token && process.env.JWT_SECRET) admin = isStaff(jwt.verify(token, process.env.JWT_SECRET).role);
     } catch { /* Token tidak valid: gunakan data publik. */ }
     const programs = await prisma.programDonasi.findMany({
       ...(admin ? { include: {

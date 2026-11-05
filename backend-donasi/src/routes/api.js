@@ -5,7 +5,7 @@ const authController = require("../controllers/authController");
 const programController = require("../controllers/programController");
 const donasiController = require("../controllers/donasiController");
 const adminController = require("../controllers/adminController");
-const { authenticateToken, isAdmin } = require("../middleware/authMiddleware");
+const { authenticateToken, isAdmin, authorize } = require("../middleware/authMiddleware");
 const programImageUpload = require("../middleware/programImageUpload");
 const blockDemoDonations = (_req, res, next) => {
   if (process.env.DEMO_MODE === "true") {
@@ -29,23 +29,23 @@ router.delete("/profil/foto", authenticateToken, adminController.hapusFotoProfil
 
 // --- ROUTES PROGRAM DONASI ---
 router.get("/program", programController.getAllProgram);
-router.post("/program", authenticateToken, isAdmin, programImageUpload, programController.createProgram);
-router.put("/program/:id", authenticateToken, isAdmin, programImageUpload, programController.updateProgram);
-router.delete("/program/:id", authenticateToken, isAdmin, programController.deleteProgram);
+router.post("/program", authenticateToken, authorize("KELOLA_PROGRAM"), programImageUpload, programController.createProgram);
+router.put("/program/:id", authenticateToken, authorize("KELOLA_PROGRAM"), programImageUpload, programController.updateProgram);
+router.delete("/program/:id", authenticateToken, authorize("KELOLA_PROGRAM"), programController.deleteProgram);
 
 // --- ROUTES DONASI ---
 router.post("/donasi", blockDemoDonations, donasiController.createDonasi);
 router.put("/donasi/:id/bukti", donasiController.uploadBuktiDonasi);
 router.get("/donasi/:id/bukti", authenticateToken, donasiController.getBuktiDonasi);
-router.delete("/donasi/:id/bukti", authenticateToken, isAdmin, donasiController.deleteBuktiDonasi);
+router.delete("/donasi/:id/bukti", authenticateToken, authorize("VERIFIKASI_DONASI"), donasiController.deleteBuktiDonasi);
 router.get("/donasi/saya", authenticateToken, donasiController.getRiwayatDonatur);
 router.get("/donasi/transparansi", donasiController.getLaporanTransparansi);
 
 // Admin verifikasi donasi (FIX BUG: saldo hanya bertambah setelah diverifikasi)
-router.put("/donasi/:id/verifikasi", authenticateToken, isAdmin, donasiController.verifikasiDonasi);
+router.put("/donasi/:id/verifikasi", authenticateToken, authorize("VERIFIKASI_DONASI"), donasiController.verifikasiDonasi);
 
 // --- ROUTES PENYALURAN ---
-router.post("/penyaluran", authenticateToken, isAdmin, donasiController.createPenyaluran);
+router.post("/penyaluran", authenticateToken, authorize("KELOLA_PENYALURAN"), donasiController.createPenyaluran);
 router.get("/penyaluran/saya", authenticateToken, donasiController.getPenyaluranSaya);
 
 // --- ROUTES PENGAJUAN BANTUAN ---
@@ -55,27 +55,27 @@ router.get("/pengajuan/saya", authenticateToken, adminController.getPengajuanSay
 router.patch("/pengajuan/:id/batalkan", authenticateToken, adminController.batalkanPengajuan);
 
 // Admin: lihat semua & verifikasi pengajuan
-router.get("/admin/pengajuan", authenticateToken, isAdmin, adminController.getAllPengajuan);
-router.put("/admin/pengajuan/:id/verifikasi", authenticateToken, isAdmin, adminController.verifikasiPengajuan);
+router.get("/admin/pengajuan", authenticateToken, authorize("LIHAT_PENGAJUAN"), adminController.getAllPengajuan);
+router.put("/admin/pengajuan/:id/verifikasi", authenticateToken, authorize("VERIFIKASI_PENGAJUAN"), adminController.verifikasiPengajuan);
 
-// --- ROUTES MANAJEMEN USER & PENGURUS (KHUSUS ADMIN) ---
+// --- ROUTES MANAJEMEN USER & PENGURUS (KHUSUS ADMIN SISTEM) ---
 router.get("/admin/pengurus", authenticateToken, isAdmin, adminController.getDaftarPengurus);
 router.post("/admin/pengurus", authenticateToken, isAdmin, adminController.tambahPengurus);
 router.put("/admin/pengurus/:id/reset-password", authenticateToken, isAdmin, adminController.resetPasswordPengurus);
-router.get("/admin/summary-keuangan", authenticateToken, isAdmin, adminController.getSummaryKeuangan);
+router.get("/admin/summary-keuangan", authenticateToken, authorize("LIHAT_RINGKASAN"), adminController.getSummaryKeuangan);
 
 // Manajemen penerima, donatur, dan donasi
-router.get("/admin/penerima", authenticateToken, isAdmin, adminController.getDaftarPenerima);
-router.get("/admin/donatur", authenticateToken, isAdmin, adminController.getDaftarDonatur);
-router.get("/admin/donasi", authenticateToken, isAdmin, donasiController.getAllDonasi);
-router.get("/admin/penerima-pending", authenticateToken, isAdmin, adminController.getPenerimaBantuanPending);
-router.put("/admin/verifikasi-penerima/:id", authenticateToken, isAdmin, adminController.verifikasiPenerimaBantuan);
+router.get("/admin/penerima", authenticateToken, authorize("LIHAT_PENERIMA"), adminController.getDaftarPenerima);
+router.get("/admin/donatur", authenticateToken, authorize("LIHAT_DONATUR"), adminController.getDaftarDonatur);
+router.get("/admin/donasi", authenticateToken, authorize("LIHAT_DONASI"), donasiController.getAllDonasi);
+router.get("/admin/penerima-pending", authenticateToken, authorize("LIHAT_PENERIMA"), adminController.getPenerimaBantuanPending);
+router.put("/admin/verifikasi-penerima/:id", authenticateToken, authorize("KELOLA_PENERIMA"), adminController.verifikasiPenerimaBantuan);
 router.put("/admin/user/:id", authenticateToken, isAdmin, adminController.updateUser);
 router.delete("/admin/user/:id", authenticateToken, isAdmin, adminController.hapusUser);
 
 // --- ROUTES EXPORT LAPORAN ---
-router.get("/laporan/pdf", authenticateToken, isAdmin, donasiController.exportPDF);
-router.get("/laporan/excel", authenticateToken, isAdmin, donasiController.exportExcel);
+router.get("/laporan/pdf", authenticateToken, authorize("LIHAT_LAPORAN"), donasiController.exportPDF);
+router.get("/laporan/excel", authenticateToken, authorize("LIHAT_LAPORAN"), donasiController.exportExcel);
 
 // --- ROUTE HEALTH CHECK DATABASE ---
 router.get("/health/db", async (req, res) => {

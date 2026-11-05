@@ -4,7 +4,9 @@ const ExcelJS = require("exceljs");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
+const { getUploadsDir, getUploadFilePath } = require("../uploadPaths");
 const { getSixMonthStart, summarizeSixMonths } = require("../utils/donationTrend");
+const { can } = require("../roles");
 
 const donationInclude = {
   donatur: { select: { id: true, nama: true, email: true } },
@@ -33,7 +35,7 @@ function simpanFileBukti(dataUrl) {
     const buffer = Buffer.from(matches[2], "base64");
     if (!buffer.length || buffer.length > 10 * 1024 * 1024) return null;
 
-    const uploadDir = path.join(__dirname, "../../uploads/bukti");
+    const uploadDir = path.join(getUploadsDir(), "bukti");
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -176,7 +178,7 @@ exports.uploadBuktiDonasi = async (req, res) => {
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "");
       if (bearer) {
         const account = jwt.verify(bearer, process.env.JWT_SECRET);
-        isAdmin = account.role === "PENGURUS";
+        isAdmin = can(account.role, "VERIFIKASI_DONASI");
         authorized ||= isAdmin || (donasi.donaturId != null && account.id === donasi.donaturId);
       }
     } catch { /* Invalid account token. */ }
@@ -219,7 +221,7 @@ exports.getBuktiDonasi = async (req, res) => {
     if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ message: "ID donasi tidak valid." });
     const donation = await prisma.donasi.findUnique({ where: { id }, select: { donaturId: true, buktiPembayaran: true } });
     if (!donation) return res.status(404).json({ message: "Donasi tidak ditemukan." });
-    if (req.user.role !== "PENGURUS" && (donation.donaturId == null || donation.donaturId !== req.user.id)) {
+    if (!can(req.user.role, "LIHAT_DONASI") && (donation.donaturId == null || donation.donaturId !== req.user.id)) {
       return res.status(403).json({ message: "Anda tidak memiliki akses ke bukti ini." });
     }
     const file = donation.buktiPembayaran;
@@ -227,7 +229,7 @@ exports.getBuktiDonasi = async (req, res) => {
       return res.status(404).json({ message: "Bukti pembayaran tidak tersedia." });
     }
     res.set("Cache-Control", "private, no-store");
-    return res.sendFile(path.join(__dirname, "../..", file.slice(1)));
+    return res.sendFile(getUploadFilePath("bukti", path.basename(file)));
   } catch (error) {
     console.error("Error getBuktiDonasi:", error);
     return res.status(500).json({ message: "Gagal memuat bukti pembayaran." });
@@ -243,7 +245,7 @@ exports.deleteBuktiDonasi = async (req, res) => {
     await prisma.donasi.update({ where: { id }, data: { buktiPembayaran: null } });
     const file = donation.buktiPembayaran;
     if (file && /^\/uploads\/bukti\/bukti-[a-zA-Z0-9._-]+\.(jpg|png|webp)$/.test(file)) {
-      fs.promises.unlink(path.join(__dirname, "../..", file.slice(1))).catch((error) => {
+      fs.promises.unlink(getUploadFilePath("bukti", path.basename(file))).catch((error) => {
         if (error.code !== "ENOENT") console.error("Gagal menghapus berkas bukti:", error);
       });
     }

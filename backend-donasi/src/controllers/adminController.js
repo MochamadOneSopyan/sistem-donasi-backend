@@ -2,6 +2,8 @@ const prisma = require("../db");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
+const { getUploadsDir, getUploadFilePath } = require("../uploadPaths");
+const { ASSIGNABLE_STAFF_ROLES, STAFF_ROLES, ROLES, isFullAccess } = require("../roles");
 
 // Helper simpan avatar file ke folder uploads/avatars/
 function simpanAvatarFile(userId, dataUrl) {
@@ -56,7 +58,7 @@ function simpanAvatarFile(userId, dataUrl) {
     throw new Error("File yang diunggah bukan file gambar yang valid.");
   }
 
-  const uploadDir = path.join(__dirname, "../../uploads/avatars");
+  const uploadDir = path.join(getUploadsDir(), "avatars");
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
@@ -73,6 +75,11 @@ function simpanAvatarFile(userId, dataUrl) {
 exports.tambahPengurus = async (req, res) => {
   try {
     const { nama, email, password } = req.body;
+    const role = req.body.role || ROLES.ADMIN_SISTEM;
+
+    if (!ASSIGNABLE_STAFF_ROLES.includes(role)) {
+      return res.status(400).json({ message: "Jabatan / role pengurus tidak valid." });
+    }
 
     if (!nama || !email || !password) {
       return res
@@ -94,7 +101,7 @@ exports.tambahPengurus = async (req, res) => {
         nama,
         email,
         password: hashedPassword,
-        role: "PENGURUS",
+        role,
       },
     });
 
@@ -118,7 +125,7 @@ exports.tambahPengurus = async (req, res) => {
 exports.getDaftarPengurus = async (req, res) => {
   try {
     const pengurus = await prisma.user.findMany({
-      where: { role: "PENGURUS" },
+      where: { role: { in: STAFF_ROLES } },
       select: {
         id: true,
         nama: true,
@@ -295,11 +302,25 @@ exports.resetPasswordPengurus = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nama, email, alamat, noHp, alasan } = req.body;
+    const { nama, email, alamat, noHp, alasan, role } = req.body;
+    const data = { nama, email };
+
+    // Jabatan hanya boleh diganti untuk akun pengurus, dan hanya ke role pengurus yang valid.
+    const target = role === undefined ? null : await prisma.user.findUnique({ where: { id: Number(id) }, select: { role: true } });
+    if (role !== undefined && !target) return res.status(404).json({ message: "Pengguna tidak ditemukan." });
+    if (target && role !== target.role) {
+      if (!STAFF_ROLES.includes(target.role) || !ASSIGNABLE_STAFF_ROLES.includes(role)) {
+        return res.status(400).json({ message: "Jabatan / role pengurus tidak valid." });
+      }
+      if (Number(id) === req.user?.id && isFullAccess(target.role) && !isFullAccess(role)) {
+        return res.status(400).json({ message: "Anda tidak dapat menurunkan hak akses akun Anda sendiri." });
+      }
+      data.role = role;
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id: Number(id) },
-      data: { nama, email },
+      data,
     });
 
     if (updatedUser.role === "PENERIMA_BANTUAN") {
@@ -772,7 +793,7 @@ exports.uploadFotoProfil = async (req, res) => {
 
     // Bersihkan file avatar fisik lama jika tersimpan di uploads/avatars/
     if (oldAvatar && oldAvatar.startsWith("/uploads/avatars/")) {
-      const oldFilePath = path.join(__dirname, "../../", oldAvatar);
+      const oldFilePath = getUploadFilePath("avatars", path.basename(oldAvatar));
       if (fs.existsSync(oldFilePath)) {
         try {
           fs.unlinkSync(oldFilePath);
@@ -814,7 +835,7 @@ exports.hapusFotoProfil = async (req, res) => {
     } catch (_) {}
 
     if (oldAvatar && oldAvatar.startsWith("/uploads/avatars/")) {
-      const filePath = path.join(__dirname, "../../", oldAvatar);
+      const filePath = getUploadFilePath("avatars", path.basename(oldAvatar));
       if (fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
