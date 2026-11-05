@@ -52,5 +52,7 @@ frontend-donasi/frontend-donasi/
 backend-donasi/backup_*.sql
 backend-donasi/prisma/*.tmp
 backend-donasi/prisma/*.backup.js
+backend-donasi/prisma/*.pem
 backend-donasi/uploads/
 backend-siap-upload/
+Daftar_Akun_Role_Sistem_Donasi.*

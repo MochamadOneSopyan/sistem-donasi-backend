@@ -1,4 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
+const { ACCOUNTS } = require("../scripts/seedRoleAccounts");
 
 const prisma = new PrismaClient();
 
@@ -18,105 +20,25 @@ async function main() {
   }
 
   // =====================================================
-  // 1. PASTIKAN DATABASE MASIH KOSONG
+  // 1. USER (13 Akun Resmi RBAC sesuai Daftar_Akun_Role_Sistem_Donasi.xlsx)
   // =====================================================
+  const userRows = [];
+  for (let i = 0; i < ACCOUNTS.length; i++) {
+    const acc = ACCOUNTS[i];
+    userRows.push({
+      id: i + 1,
+      nama: acc.nama,
+      email: acc.email,
+      password: await bcrypt.hash(acc.password, 10),
+      role: acc.role,
+    });
+  }
+  await prisma.user.createMany({ data: userRows });
+  console.log("👤 13 Akun Role RBAC berhasil dimasukkan");
 
   // =====================================================
-  // 2. USER
+  // 2. PROGRAM DONASI
   // =====================================================
-
-  await prisma.user.createMany({
-    data: [
-      {
-        id: 1,
-        nama: "Pengurus Yayasan",
-        email: "admin@yayasan.com",
-        password:
-          "$2b$10$D6oRAxiAIgIGkwX.4esgsuhKDNNXubwEEksY965otro89ecpQmmdW",
-        role: "PENGURUS",
-        createdAt: new Date("2026-09-14T17:41:21.695Z"),
-      },
-      {
-        id: 2,
-        nama: "Budi Santoso",
-        email: "budi@gmail.com",
-        password:
-          "$2b$10$D6oRAxiAIgIGkwX.4esgsuhKDNNXubwEEksY965otro89ecpQmmdW",
-        role: "DONATUR",
-        createdAt: new Date("2026-09-14T17:58:03.266Z"),
-      },
-      {
-        id: 3,
-        nama: "Siti Aminah",
-        email: "siti@gmail.com",
-        password:
-          "$2b$10$D6oRAxiAIgIGkwX.4esgsuhKDNNXubwEEksY965otro89ecpQmmdW",
-        role: "PENERIMA_BANTUAN",
-        createdAt: new Date("2026-09-14T18:04:31.269Z"),
-      },
-      {
-        id: 5,
-        nama: "donatur test",
-        email: "donatur@gmail.com",
-        password:
-          "$2b$10$uGRYsB7ph9gWDnRc6/6xPOixDZxSYO9pJJIAG/3P6//AASCJAf3tO",
-        role: "DONATUR",
-        createdAt: new Date("2026-09-20T18:53:58.336Z"),
-      },
-      {
-        id: 6,
-        nama: "pbantuan",
-        email: "pbantuan@gmail.com",
-        password:
-          "$2b$10$8Xitc5GoAE/5f36EWDlFH.3W4IqxeyvF7Ewv20hT8XRlFUHr9aPTa",
-        role: "PENERIMA_BANTUAN",
-        createdAt: new Date("2026-09-20T18:54:57.341Z"),
-      },
-      {
-        id: 7,
-        nama: "Yoms",
-        email: "Yoms@yayasan.org",
-        password:
-          "$2b$10$D6oRAxiAIgIGkwX.4esgsuhKDNNXubwEEksY965otro89ecpQmmdW",
-        role: "PENGURUS",
-        createdAt: new Date("2026-09-20T19:13:11.759Z"),
-      },
-      {
-        id: 17,
-        nama: "Jamet2@yayasan.org",
-        email: "Jamet2@yayasan.org",
-        password:
-          "$2b$10$uGRYsB7ph9gWDnRc6/6xPOixDZxSYO9pJJIAG/3P6//AASCJAf3tO",
-        role: "DONATUR",
-        createdAt: new Date("2026-09-22T18:34:07.301Z"),
-      },
-      {
-        id: 18,
-        nama: "goy",
-        email: "goy@yayasan.org",
-        password:
-          "$2b$10$8Xitc5GoAE/5f36EWDlFH.3W4IqxeyvF7Ewv20hT8XRlFUHr9aPTa",
-        role: "PENERIMA_BANTUAN",
-        createdAt: new Date("2026-09-22T18:34:51.495Z"),
-      },
-      {
-        id: 19,
-        nama: "pbantuan1@gmail.com",
-        email: "pbantuan1@gmail.com",
-        password:
-          "$2b$10$8Xitc5GoAE/5f36EWDlFH.3W4IqxeyvF7Ewv20hT8XRlFUHr9aPTa",
-        role: "PENERIMA_BANTUAN",
-        createdAt: new Date("2026-09-23T16:35:48.200Z"),
-      },
-    ],
-  });
-
-  console.log("👤 User berhasil dimasukkan");
-
-  // =====================================================
-  // 3. PROGRAM DONASI
-  // =====================================================
-
   await prisma.programDonasi.createMany({
     data: [
       {
@@ -147,50 +69,23 @@ async function main() {
       },
     ],
   });
-
   console.log("📢 Program donasi berhasil dimasukkan");
 
   // =====================================================
-  // 4. PENERIMA BANTUAN
+  // 3. PENERIMA BANTUAN (Terhubung ke akun Penerima Bantuan Demo id=13)
   // =====================================================
-
   await prisma.penerimaBantuan.createMany({
     data: [
       {
         id: 1,
-        userId: 3,
+        userId: 13,
         alamat: "Jl. Mawar No. 12, Jakarta",
         noHp: "081234567890",
-        alasan: "Janda lansia tidak memiliki penghasilan tetap",
+        alasan: "Keluarga dhuafa membutuhkan dukungan biaya pokok dan pendidikan",
         status: "DISETUJUI",
-      },
-      {
-        id: 2,
-        userId: 6,
-        alamat: "Bogor",
-        noHp: "08980980",
-        alasan: "Belum makan",
-        status: "DITOLAK",
-      },
-      {
-        id: 6,
-        userId: 18,
-        alamat: "goy@yayasan.org",
-        noHp: "5454",
-        alasan: "goy@yayasan.org",
-        status: "VERIFIKASI",
-      },
-      {
-        id: 7,
-        userId: 19,
-        alamat: "asas",
-        noHp: "7876",
-        alasan: "asasa",
-        status: "VERIFIKASI",
       },
     ],
   });
-
   console.log("🤝 Penerima bantuan berhasil dimasukkan");
 
   // =====================================================
@@ -204,7 +99,7 @@ async function main() {
         jumlah: 500000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-14T18:03:15.219Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 1,
         buktiPembayaran: null,
         metodePembayaran: "TRANSFER_BANK",
@@ -214,7 +109,7 @@ async function main() {
         jumlah: 20000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-20T15:08:03.295Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 1,
         buktiPembayaran: null,
         metodePembayaran: "QRIS",
@@ -224,7 +119,7 @@ async function main() {
         jumlah: 50000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-20T15:08:12.462Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 1,
         buktiPembayaran: null,
         metodePembayaran: "TRANSFER_BSI",
@@ -234,7 +129,7 @@ async function main() {
         jumlah: 50000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-20T15:24:16.510Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 1,
         buktiPembayaran: null,
         metodePembayaran: "TRANSFER_BSI",
@@ -244,7 +139,7 @@ async function main() {
         jumlah: 500000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-20T15:24:21.441Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 2,
         buktiPembayaran: null,
         metodePembayaran: "TRANSFER_BSI",
@@ -254,7 +149,7 @@ async function main() {
         jumlah: 50000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-20T15:24:26.216Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 3,
         buktiPembayaran: null,
         metodePembayaran: "TRANSFER_BSI",
@@ -264,7 +159,7 @@ async function main() {
         jumlah: 20000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-20T15:24:55.375Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 3,
         buktiPembayaran: null,
         metodePembayaran: "TRANSFER_BSI",
@@ -274,7 +169,7 @@ async function main() {
         jumlah: 250000,
         status: "BERHASIL",
         createdAt: new Date("2026-09-20T19:11:58.049Z"),
-        donaturId: 2,
+        donaturId: 12,
         programId: 2,
         buktiPembayaran: null,
         metodePembayaran: "QRIS",
