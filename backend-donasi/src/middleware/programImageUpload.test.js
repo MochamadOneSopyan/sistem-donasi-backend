@@ -23,7 +23,7 @@ test("upload program memerlukan admin dan membatasi format serta ukuran", async 
 
   try {
     const donorToken = jwt.sign({ role: "DONATUR" }, process.env.JWT_SECRET);
-    const adminToken = jwt.sign({ role: "PENGURUS" }, process.env.JWT_SECRET);
+    const adminToken = jwt.sign({ role: "ADMIN_SISTEM" }, process.env.JWT_SECRET);
     const jpg = await sharp({ create: { width: 4, height: 4, channels: 3, background: "#065642" } }).jpeg().toBuffer();
     assert.equal((await request(null, jpg, "image/jpeg")).status, 401);
     assert.equal((await request(donorToken, jpg, "image/jpeg")).status, 403);
